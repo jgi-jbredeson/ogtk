@@ -1,0 +1,439 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+import os
+import sys
+import math
+import numpy
+import pandas
+import getopt
+import matplotlib.pyplot as plotter
+
+from matplotlib.colors import to_hex
+from matplotlib import colormaps as cmaps
+
+__authors__ = 'Jessen V. Bredeson'
+__program__ = os.path.basename(__file__)
+__pkgname__ = '__PACKAGE_NAME__'
+__version__ = '__PACKAGE_VERSION__'
+__contact__ = '__PACKAGE_CONTACT__'
+__purpose__ = 'Plot label densities along the genome'
+
+num = len
+
+_bed_field_types = {'chr':str, 'beg':int, 'end':int, 'name':str, 'score':float, 'strand':str}
+_map_field_types = {'name':str, 'label':str}
+_valid_output_types = ('pdf','png','ps','eps','svg')
+_valid_coordinate_systems = ('genomic','ordinal')
+_palette_priority = ['tab10','Set3','Dark2','Pastel1','tab20b','tab20c','Accent','Set2','Set1','Pastel2','tab20','Paired']
+_default_colors = []
+for palette in _palette_priority:
+    _default_colors.extend(reversed(cmaps[palette].colors))
+
+
+def get_num_bins(num_data, bin_width=1, bin_step=1):
+    return max(1, math.ceil(float(num_data) / bin_step))
+
+
+def get_frequencies(data, labels, bin_width=1, bin_step=1):
+    """
+    The data object is a pandas.Series and the labels object is a dictionary
+    containing labels as keys and indices as values
+    """
+    num_bins = get_num_bins(num(data), bin_width, bin_step)
+    label_freq = numpy.zeros((num_bins, num(labels)), dtype=numpy.float64)
+    label_max = numpy.zeros(num_bins)
+    idx_begs = []
+    idx_ends = []
+    for i in range(num_bins):
+        bin_beg = bin_step * i
+        bin_end = bin_step * i + bin_width
+        
+        bin_loci = data.iloc[bin_beg:bin_end]
+            
+        for label in labels:
+            label_freq[i, labels[label]] = num(bin_loci[bin_loci == label])
+            
+        label_freq[i,:] = label_freq[i,:] / max(1, label_freq[i,:].sum())
+
+        idx_begs.append(bin_loci.index[0])
+        idx_ends.append(bin_loci.index[-1])
+
+    return label_freq, numpy.array(idx_begs), numpy.array(idx_ends)
+
+
+
+def get_blocks(data, labels, bin_width=1, bin_step=1):
+    num_bins = get_num_bins(num(data), bin_width, bin_step)
+    bin_freq, _, _ = get_frequencies(data, labels, bin_width, bin_step)
+    bin_max = bin_freq.argmax(1)
+
+    blocks = []
+    block_beg = 0
+    block_end = 0
+    min_delta = 1.0
+    for j in range(1, num_bins):
+        i = max(0, j - bin_width // bin_step)
+        if bin_max[i] != bin_max[j]:
+            delta = abs(bin_freq[i, bin_max[i]] - bin_freq[j, bin_max[j]])
+            if delta < min_delta:
+                min_delta = delta
+                block_end = j
+        elif block_end:
+            blocks.append((data.index[block_beg], data.index[block_end]))
+            block_beg = block_end
+            block_end = 0
+            min_delta = 1.0
+
+    blocks.append((data.index[block_beg], data.index[-1] + 1))
+        
+    return blocks
+
+
+
+def read_colors(colorfile_name):
+    colordict = {}
+    colorfile = open(colorfile_name, 'r')
+    for line in colorfile:
+        line = line.strip()
+        if line == '' or line.startswith('#'):
+            continue
+        fields = line.split('\t')
+    
+        colordict[fields[0]] = fields[1].strip(""""'""")
+
+    colorfile.close()
+    
+    return colordict
+
+
+
+def infer_output_type(output_file, output_type=None):
+    if output_type is None:
+        output_type = output_file.rsplit('.', maxsplit=1)
+        if len(output_type) > 1:
+            output_type = output_type[-1].lower()
+        else:
+            output_type = _valid_output_types[0]
+    if output_type not in _valid_output_types:
+        usage('Invalid output image type: `%s`' % output_type)
+    return output_type
+
+
+
+def plot_color_legend(lg_colors, file=None):
+    if file:
+        legend_type = infer_output_type(file)
+    else:
+        legend_type = _valid_output_types[0]
+        
+    num_colors = num(lg_colors)
+    num_side = math.ceil(math.sqrt(num_colors))
+    fig, ax = plotter.subplots(num_side, num_side, figsize=(num_side, num_side))
+    fig.tight_layout()
+    i = 0
+    j = 0
+    k = 0
+    for lg in lg_colors:
+        if num_side <= i:
+            j += 1
+            i = 0
+        ax[i][j].bar([0], [1], 1, color=lg_colors[lg], align='edge')
+        ax[i][j].set_xbound(0, 1)
+        ax[i][j].set_ybound(0, 1)
+        ax[i][j].xaxis.set_tick_params(labelbottom=False)
+        ax[i][j].yaxis.set_tick_params(labelbottom=False)
+        ax[i][j].set_xticks([])
+        ax[i][j].set_yticks([])
+        ax[i][j].set_title(lg, loc='left')
+        i += 1
+        k += 1
+
+    for n in range(k, num_side**2):
+        if num_side <= i:
+            j += 1
+            i = 0
+        ax[i][j].set_axis_off()
+        i += 1
+
+    if file:
+        plotter.savefig(file, format=legend_type)
+    else:
+        plotter.show()
+
+
+def write_color_legend(lg_colors, file):
+    legend_type = infer_output_type(file)
+    file = file[:-len(legend_type)] + 'tsv'
+    with open(file, 'wt') as colorsfile:
+        for lg in lg_colors:
+            colorsfile.write('%s\t"%s"\n' % (lg, to_hex(lg_colors[lg])))
+        
+
+def get_chrom_sizes(locus_bed, system='genomic'):
+    chr_size = {}
+    for chr_name in locus_bed['chr'].unique():
+        chr_loci = locus_bed[locus_bed['chr'] == chr_name]
+        if system == 'ordinal':
+            chr_size[chr_name] = num(chr_loci)
+        else:
+            chr_size[chr_name] = chr_loci['end'].max()
+
+    return chr_size
+
+
+
+def get_chrom_offsets(chr_sizes):
+    sum_size = 0
+    chr_offset = {}
+    for chr_name in chr_sizes:
+        chr_offset[chr_name] = sum_size
+        sum_size += chr_sizes[chr_name]
+    return chr_offset
+
+
+    
+def usage(message=None, exitcode=1, stream=sys.stderr):
+    message = '' if message is None else 'ERROR: %s\n\n' % message
+    stream.write("\n")
+    stream.write("Program: %s (%s)\n" % (__program__, __purpose__))
+    stream.write("Version: %s %s\n" % (__pkgname__, __version__))
+    stream.write("Contact: %s\n" % __contact__)
+    stream.write("\n")
+    stream.write("Usage: %s [options] <locus.bed> <locus-to-lg.tsv>\n" % __program__)
+    stream.write("\n")
+    stream.write("Options:\n")
+    stream.write("    -A,--adaptive-binning         Optimize binning boundaries\n")
+    stream.write("    -C,--color-map-file <file>    LG-to-color map file\n")
+    stream.write("    -c,--coordinate-system <str>  Plot coordinates in {genomic,ordinal}\n")
+    stream.write("    -O,--output-type <str>        Output image format [%s]\n" % _valid_output_types[0])
+    stream.write("    -o,--output-file <str>        Output file name [input-prefix]\n")
+    stream.write("    -w,--bin-width <uint>         Bin width in number of loci [10]\n")
+    stream.write("    -h,--help                     Print this help message and exit.\n")
+    stream.write("\n")
+    stream.write("\n%s" % message)
+    sys.exit(exitcode)
+
+
+def main(argv):
+    short_options = 'hAC:c:O:o:w:l:'
+    long_options = (
+        'help',
+        'adaptive-binning',
+        'bin-width=',
+        'coordinate-system=',
+        'color-map-file=',
+        'output-file=',
+        'output-type=',
+        'output-legend-file=',
+    )
+    try:
+        options, arguments = getopt.getopt(argv, short_options, long_options)
+    except getopt.GetoptError as message:
+        usage(message)
+
+    bin_width = 10
+    output_type = None
+    output_file = None
+    legend_file = None
+    adaptive_binning = False
+    colorsfile_name = None
+    coordinate_system = _valid_coordinate_systems[0]
+    for flag, value in options:
+        if   flag in ('-h','--help'): usage(exitcode=0)
+        elif flag in ('-w','--bin-width'): bin_width = int(value)
+        elif flag in ('-A','--adaptive-binning'): adaptive_binning = True
+        elif flag in ('-C','--color-map-file'): colorsfile_name = value
+        elif flag in ('-c','--coordinate-system'): coordinate_system = value
+        elif flag in ('-O','--output-type'): output_type = value
+        elif flag in ('-o','--output-file'): output_file = value
+        elif flag in ('-l','--output-legend-file'): legend_file = value
+
+    if coordinate_system not in _valid_coordinate_systems:
+        usage('Unsupported coordinate system: `%s`' % coordinate_system)
+    if num(arguments) != 2:
+        usage('Unexpected number of arguments')
+
+    if output_file is None:
+        output_type = infer_output_type('', output_type)
+        if arguments[0].lower().endswith('.bed'):
+            output_file = arguments[0][:-4]
+        output_file = '%s.%s' % (
+            output_file,
+            output_type
+        )
+    else:
+        output_type = infer_output_type(output_file, output_type)
+        
+    locusbed_name = arguments[0]
+    locusmap_name = arguments[1]
+
+    locus_bed = pandas.read_table(locusbed_name, names=['chr','beg','end','name','score','strand'], header=None, sep="\t")
+    locus_bed = locus_bed.astype(_bed_field_types)
+    locus_map = pandas.read_table(locusmap_name, names=['name','label'], header=None, sep="\t", dtype=str)
+    locus_map = locus_map.astype(_map_field_types)
+
+    # Option `how='inner'` causes output df to be re-indexed, so cannot use it.
+    labeled_loci = pandas.merge(locus_bed, locus_map, on='name', how='outer').dropna()
+
+    # colorsfile_name = None
+    if colorsfile_name is None:
+        label_colors = {}
+        label_index = {}
+        for i, label in enumerate(locus_map['label'].unique()):
+            label_colors[label] = _default_colors[i]
+            label_index[label] = i
+    else:
+        label_colors = read_colors(colorsfile_name)
+        label_index = dict(zip(label_colors, range(len(label_colors))))
+
+    chr_size = get_chrom_sizes(locus_bed, system=coordinate_system)
+    chr_offset = get_chrom_offsets(chr_size)
+
+
+    max_size = max(chr_size.values())
+    num_chr = num(labeled_loci['chr'].unique())
+
+    fig, ax = plotter.subplots(num_chr, figsize=(8, num_chr))
+    fig.tight_layout()
+
+    for chr_index, chr_name in enumerate(labeled_loci['chr'].unique()):
+        chr_loci = labeled_loci[labeled_loci['chr'] == chr_name]
+
+        if adaptive_binning:
+            blocks = get_blocks(chr_loci['label'], label_index, bin_width, bin_step=1)
+        else:
+            blocks = [(chr_loci.index[0], chr_loci.index[-1] + 1)]
+
+        bin_freq = None
+        bin_begs = []
+        bin_ends = []
+        for block_beg, block_end in blocks:
+            block_loci = chr_loci.loc[block_beg:block_end]
+
+            _bin_freq, _bin_begs, _bin_ends = get_frequencies(block_loci['label'], label_index, bin_width, bin_width)
+
+            if bin_freq is None:
+                bin_freq = _bin_freq
+            else:
+                bin_freq = numpy.vstack((bin_freq, _bin_freq))
+
+            bin_begs.extend(_bin_begs)
+            bin_ends.extend(_bin_ends)
+
+        assert num(bin_freq) == num(bin_begs) == num(bin_ends), \
+            'Mismatched number of frequencies and bin positions'
+
+        chr_freq = bin_freq.T
+        chr_begs = numpy.zeros(num(bin_begs), dtype=numpy.int64)
+        chr_ends = numpy.zeros(num(bin_ends), dtype=numpy.int64)
+        for i in range(num(bin_ends)):
+            if coordinate_system == 'ordinal':
+                chr_begs[i] = chr_ends[i-1]
+                chr_ends[i] = bin_ends[i] - chr_offset[chr_name]
+            else:
+                chr_begs[i] = chr_ends[i-1]
+                chr_ends[i] = chr_loci['end'][bin_ends[i]]
+
+        bottom = numpy.zeros(num(chr_ends))
+        for label in label_index:
+            ax[chr_index].bar(
+                x=chr_begs, 
+                height=chr_freq[label_index[label],:], 
+                width=chr_ends-chr_begs, 
+                bottom=bottom, 
+                color=label_colors[label], 
+                align='edge'
+            )
+            bottom += chr_freq[label_index[label],:]
+
+        ax[chr_index].hlines(0, 0, chr_size[chr_name], linewidth=3.0, color='black')
+        ax[chr_index].set_xbound(0, max_size)
+        ax[chr_index].spines['bottom'].set_visible(False)
+        ax[chr_index].spines['right'].set_visible(False)
+        ax[chr_index].spines['top'].set_visible(False)
+        ax[chr_index].set_ylabel(chr_name)
+    
+    plotter.savefig(output_file, format=output_type)
+
+    if legend_file:
+        plot_color_legend(label_colors, file=legend_file)
+        write_color_legend(label_colors, file=legend_file)
+
+
+        
+if __name__ == '__main__':
+    main(sys.argv[1:])
+
+
+    
+# from matplotlib.colors import hsv_to_rgb
+
+# fig, ax = plotter.subplots()
+# u = 12 # of hues
+# y = 1.0/2.0  # fractions of a color (light) 
+# z = 1.0/2.0  # fractions of a color (dark)
+
+# HSV = []
+
+# i = 0
+# j = u
+# s = 1
+# v = 0
+# S = 1.0
+# V = 1.0
+# while i < 60:
+#     H = (1.0 / u) * (i % u)
+#     if S < y:
+#         s = 0
+#         v = 1
+#     if V < z:
+#         v = 0
+        
+#     if s:
+#         S = 1.0 - y * (i // u)
+#     else:
+#         S = 1.0
+#     if v:
+#         V = 1.0 - z * (j // u)
+#         j += 1
+#     else:
+#         V = 1.0
+
+#     if (H, S, V) == (0.0, 0.0, 1.0):
+#         # white
+#          continue
+        
+#     HSV.append((H, S, V))
+#     i += 1
+
+# RGB = hsv_to_rgb(HSV)
+
+# ax.scatter(range(num(RGB)), range(num(RGB)), color=RGB)
+# plotter.show()
+
+
+# # In[11]:
+
+
+# HSV[24]
+
+
+# # In[125]:
+
+
+# for h, s, v in HSV:
+#     print(h, s, v)
+
+
+# # In[44]:
+
+
+# c = cmaps['Dark2']
+
+
+# # In[45]:
+
+
+# c.colors
+
