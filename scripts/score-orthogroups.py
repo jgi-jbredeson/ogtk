@@ -1,0 +1,395 @@
+#!/usr/bin/env python
+
+import os
+
+__authors__ = 'Jessen V. Bredeson'
+__program__ = os.path.basename(__file__)
+__pkgname__ = '__PACKAGE_NAME__'
+__version__ = '__PACKAGE_VERSION__'
+__contact__ = '__PACKAGE_CONTACT__'
+__purpose__ = 'Use manual clustering to classify new groups'
+
+
+import re
+import sys
+import getopt
+
+from og.core.io import open, is_stream
+from og.core.parsers.orthogroups import Orthogroups, OrthoFinderOrthogroups
+from og.constants import (
+    _COMMA,
+    _COMMENT,
+    _EMPTY,
+    _SPACE,
+    _TAB,
+)
+
+_DEBUG = False
+_STRICT = 1
+_LENIENT = 2
+
+num = len
+
+class ProbabilitiesTable(object):
+    def __init__(self):
+        self.colnames = []
+        self.rownames = []
+        self.colindex = {}
+        self.rowindex = {}
+        self.matrix = []
+
+        
+class ClusteredOrthogroups(Orthogroups):
+    def __init__(self, infile=None, **kwargs):
+        Orthogroups.__init__(self)
+        self._prefix = 'Count\tCluster'
+        self.counts = []
+        self.clusters = []
+        self.probabilities = []
+        
+        if infile is not None:
+            if is_stream(infile):
+                # io object
+                self._read_orthogroups_file(infile)
+            else:
+                if 'mode' in kwargs:
+                    if 'a' in kwargs['mode'] or \
+                       'w' in kwargs['mode']:
+                        raise ValueError("%s() constructor is read-only" % (
+                            self.__class__.__name__
+                        ))
+                else:
+                    kwargs['mode'] = 'rt'
+                self._read_orthogroups_file(open(infile, **kwargs))
+
+
+    def _read_orthogroups_file(self, infile):
+        cluster_id = -1
+        num_fields = -1
+        species_field = 2
+        group_tag = '##group='
+        header = self._prefix
+        comment = _COMMENT + _SPACE
+        for line in infile:
+            line = line.lstrip().rstrip('\r\n')
+
+            if line == _EMPTY or \
+               line.startswith(comment):
+                continue
+        
+            if line.startswith(header):
+                fields = line.split(_TAB)
+                num_fields = num(fields)
+                self.species = list(map(str.strip, fields[species_field:]))
+                
+            elif num_fields < 0:
+                raise Exception("No header detected in file: %s" % infile)
+
+            elif line.startswith(group_tag):
+                cluster_id = line[len(group_tag):].strip()
+                
+            else:
+                fields = line.split(_TAB)
+                group = []
+                for i in range(species_field, num_fields):
+                    fields[i] = fields[i].strip()
+                    if num(fields[i]) > 0:
+                        group.append(tuple(map(str.strip, fields[i].split(_COMMA))))
+                    else:
+                        group.append(tuple())
+
+                self.clusters.append(cluster_id)
+                self.counts.append(int(fields[0].strip()))
+                self.ids.append(fields[1].strip())
+                self.groups.append(group)
+                
+        assert num(self.counts) == num(self.ids) == num(self.groups), \
+            "Mismatched number of orthogroups, counts, or IDs"
+
+        self.probabilities = [-1] * num(self.groups)
+        
+        
+    def format_orthogroups_header(self, species=None, id=None):
+        if id is None:
+            id = self._prefix
+        if species is None:
+            species = self.species
+        return '%s\t%s\tPostID\tPostProb' % (id, _TAB.join(species))
+
+
+    def format_orthogroups_record(self, id=None, cluster=None, prob=None, group=None, count=0, index=None):
+        if index is not None:
+            id = self.ids[index]
+            group = self.groups[index]
+            count = self.counts[index]
+            cluster = self.clusters[index]
+            prob = self.probabilities[index]
+            
+        return _TAB.join((
+            str(count),
+            str(id),
+            _TAB.join(map(self._join_on_comma, group)),
+            str(cluster),
+            '%g' % prob
+        ))
+    
+
+    
+class ClusterErrorOrthogroups(ClusteredOrthogroups):
+    def __init__(self, infile=None, **kwargs):
+        ClusteredOrthogroups.__init__(self, infile, **kwargs)
+
+    def format_orthogroups_header(self, species=None, id=None):
+        if id is None:
+            id = self._prefix
+        if species is None:
+            species = self.species
+        return '%s\t%s\tManualID\tManualProb\tPostID\tPostProb' % (id, _TAB.join(species))
+
+    
+    def format_orthogroups_record(self, id=None, cluster=None, prob=None, group=None, count=0, index=None):
+        if index is not None:
+            id = self.ids[index]
+            group = self.groups[index]
+            count = self.counts[index]
+            cluster = self.clusters[index]
+            prob = self.probabilities[index]
+        
+        return _TAB.join((
+            str(count), 
+            str(id),
+            _TAB.join(map(self._join_on_comma, group)),
+            str(cluster[0]), '%g' % prob[0],
+            str(cluster[1]), '%g' % prob[1],
+        ))
+
+    
+
+def _min0(x):
+    return 0.0 if x < 0.0 else x
+    
+def index_list(lst):
+    return { item: i for i, item in enumerate(lst) }
+
+    
+def _calc_joint_prob(ortho):
+    total = 0
+    joint_freq = {}
+    num_clusters = num(set(ortho.clusters))
+    cluster_index = index_list(sorted(set(ortho.clusters)))
+    for g in range(num(ortho.groups)):
+        for s in range(num(ortho.species)):
+            if ortho.groups[g][s] is None:
+                continue
+            for member in ortho.groups[g][s]:
+                if member not in joint_freq:
+                    joint_freq[member] = [0] * num_clusters
+                    
+                joint_freq[member][cluster_index[ortho.clusters[g]]] += ortho.counts[g]
+                total += ortho.counts[g]
+
+    total = float(total)
+    for member in joint_freq:
+        for c in range(num(joint_freq[member])):
+            joint_freq[member][c] = float(joint_freq[member][c]) / total
+
+    return joint_freq
+
+
+def _calc_marginal_prob(ortho):
+    total = 0
+    mrgnl_freq = {}
+    for g in range(num(ortho.groups)):
+        for s in range(num(ortho.species)):
+            if ortho.groups[g][s] is None:
+                continue
+            for member in ortho.groups[g][s]:
+                if member in mrgnl_freq:
+                    mrgnl_freq[member] += ortho.counts[g]
+                else:
+                    mrgnl_freq[member] = ortho.counts[g]
+                total += ortho.counts[g]
+
+    total = float(total)
+    for member in mrgnl_freq:
+        mrgnl_freq[member] = float(mrgnl_freq[member]) / total
+    
+    return mrgnl_freq
+
+    
+def calc_conditional_prob(orthoA, orthoB, unplaced_re=None):
+    """
+    Calculate the joint probability of chr and cluster, divided by the marginal
+    probability of a chr.
+
+    By Bayes' Theorum:
+
+      P(A | B) =  (P(B | A) * P(A)) / P(B)
+               = ((P(B n A) / P(A)) * P(A)) / P(B)
+               =   P(B n A) / P(B)
+    """
+    joint_prob = _calc_joint_prob(orthoB)
+    marginal_prob = _calc_marginal_prob(orthoB)
+    
+    probs = ProbabilitiesTable()
+    probs.colnames = sorted(set(orthoB.clusters))
+    prior_species = set(orthoB.species)    
+    num_clusters = num(probs.colnames)
+    for g in range(num(orthoA.groups)):
+        cluster_prob = [-1] * num_clusters
+        
+        for s in range(num(orthoA.species)):
+            if orthoA.species[s] not in prior_species:
+                continue
+            for c in range(num_clusters):
+                prob = 1e-6
+                for member in orthoA.groups[g][s]:
+                    if unplaced_re and \
+                       unplaced_re.search(member):
+                        continue
+                    try:
+                        prob += joint_prob[member][c] / marginal_prob[member]
+                    except KeyError:
+                        pass
+                    
+                if cluster_prob[c] < 0:
+                    cluster_prob[c] = prob
+                else:
+                    cluster_prob[c] *= prob
+
+        cluster_prob = list(map(_min0, cluster_prob))
+        cluster_norm = sum(cluster_prob) or 1.0
+        cluster_prob = list(map(lambda p: p/cluster_norm, cluster_prob))
+        
+        probs.rownames.append(orthoA.ids[g])
+        probs.matrix.append(cluster_prob)
+
+    probs.colindex = index_list(probs.colnames)
+    probs.rowindex = index_list(probs.rownames)
+        
+    return probs
+
+
+def assign_clusters(ortho, probs):
+    cindices = list(range(num(probs.colnames)))
+    for g in range(num(ortho.groups)):
+        gid = ortho.ids[g]
+        if gid in probs.rowindex:
+            cid = max(
+                cindices,
+                key=probs.matrix[probs.rowindex[gid]].__getitem__
+            )
+            ortho.clusters[g] = probs.colnames[cid]
+            ortho.probabilities[g] = probs.matrix[probs.rowindex[gid]][cid]
+
+    return ortho
+
+
+def usage(message=None, exitcode=1, stream=sys.stderr):
+    message = _EMPTY if message is None else 'ERROR: %s\n\n' % message
+    stream.write("\n")
+    stream.write("Program: %s (%s)\n" % (__program__, __purpose__))
+    stream.write("Version: %s %s\n" % (__pkgname__, __version__))
+    stream.write("Contact: %s\n" % __contact__)
+    stream.write("\n")
+    stream.write("Usage:   %s [options] <classified.tsv> [unclassified.tsv]\n" % __program__)
+    stream.write("\n")
+    stream.write("Options:\n")
+    stream.write("  -E,--check-errors\n")
+    stream.write("     Check for classification errors in classified.tsv\n")
+    stream.write("\n")
+    stream.write("  -e,--regex-unplaced <regex>\n")
+    stream.write("     Identify unplaced sequence using the specified regex.\n")
+    stream.write("\n")
+    stream.write("  -I,--ignore-unplaced-strictly\n")
+    stream.write("     Strictly ignore unplaced sequences in filtering. If a cell in the\n")
+    stream.write("     input orthogroups table contains no chromosomal sequences, that cell\n")
+    stream.write("     then contains no members.\n")  # Takes effect only when the `-b` option is\n")
+    # stream.write("     also enabled.\n")
+    stream.write("\n")
+    stream.write("  -i,--ignore-unplaced-leniently\n")
+    stream.write("     Leniently ignore unplaced sequences in filtering. If a cell in the\n")
+    stream.write("     input orthogroups table contains only unplaced (ie, non-chomosomal)\n")
+    stream.write("     sequences, that cell contains members.\n")  # Takes effect only when the\n")
+    # stream.write("     `-b` option is also enabled.\n")
+    stream.write("\n")
+    stream.write("  -h,--help\n")
+    stream.write("     Print this help message and exit\n")
+    #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
+    #            0        10        20        30        40        50        60        70        80
+    stream.write("\n")
+    stream.write("Notes:\n")
+    stream.write("  classified.tsv is a cluster-orthogroups.tsv *.mrg.counts.tsv output\n")
+    stream.write("  file with lines organzied into larger syntenic groups using some manual\n")
+    stream.write("  algorithm. Clustered lines are headed using `##group=N` meta lines\n")
+    stream.write("  to define the cluster group and their ID (N).\n")
+    stream.write("\n")
+    stream.write("\n%s" % message)
+    sys.exit(exitcode)
+
+    
+def main(argv):
+    short_options = 'hEe:'
+    long_options = (
+        'help',
+        'check-errors',
+        'regex-unplaced=',
+    )
+    try:
+        options, arguments = getopt.getopt(argv, short_options, long_options)
+    except getopt.GetoptError as message:
+        usage(message)
+
+    check_errors = False
+    regex_unplaced = None
+    ignore_unplaced = _STRICT
+    for flag, value in options:
+        if   flag in ('-h','--help'): usage(exitcode=0)
+        elif flag in ('-E','--check-errors'): check_errors = True
+        elif flag in ('-e','--regex-unplaced'): regexp_unplaced = re.compile(value)
+        elif flag in ('-i','--ignore-unplaced-leniently'): ignore_unplaced = _LENIENT
+        elif flag in ('-I','--ignore-unplaced-strictly'): ignore_unplaced = _STRICT
+
+    if num(arguments) != 1 and \
+       num(arguments) != 2:
+        usage('Unexpected number of arguments')
+
+    if num(arguments) == 1:
+        arguments.append(arguments[0])
+    if check_errors:
+        arguments[1] = arguments[0]
+
+        
+    orthoM = ClusteredOrthogroups(arguments[0])
+    orthoU = ClusteredOrthogroups(arguments[1])
+
+    pprobs = calc_conditional_prob(orthoU, orthoM, regexp_unplaced)
+
+    orthoU = assign_clusters(orthoU, pprobs)
+
+    if check_errors:
+        cindex = pprobs.colindex
+        rindex = pprobs.rowindex
+        errors = ClusterErrorOrthogroups()
+        errors.species = orthoU.species
+        for g in range(num(orthoU.groups)):
+            if orthoU.clusters[g] != orthoM.clusters[g]:
+                errors.clusters.append((
+                    orthoM.clusters[g],
+                    orthoU.clusters[g]
+                ))
+                errors.probabilities.append((
+                    pprobs.matrix[rindex[orthoM.ids[g]]][cindex[orthoM.clusters[g]]],
+                    pprobs.matrix[rindex[orthoU.ids[g]]][cindex[orthoU.clusters[g]]]
+                ))
+                errors.counts.append(orthoU.counts[g])
+                errors.groups.append(orthoU.groups[g])
+                errors.ids.append(orthoU.ids[g])
+
+        orthoU = errors
+
+    orthoU.to_table()
+
+    
+if __name__ == '__main__':
+    main(sys.argv[1:])

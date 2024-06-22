@@ -419,12 +419,12 @@ def main(argv):
         pattern_incl_unanchored = ortho.groups[i]
         pattern_excl_unanchored = [tuple()] * num_species
         for j in range(num_species):
-            pattern_excl_unanchored[j] = tuple(filter_unplaced_sequences(
+            pattern_excl_unanchored[j] = tuple(sorted(filter_unplaced_sequences(
                 pattern_incl_unanchored[j],
                 ortho.species[j],
                 regexp_unplaced,
                 ignore_unplaced
-            ))
+            )))
         pattern = tuple(pattern_excl_unanchored)
 
         if pattern not in distinct_pattern_index_map:

@@ -6,15 +6,34 @@ import sys
 
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.constants import (
+    _EMPTY,
     _EOL,
     _TAB
 )
 
 num = len
-_UNPLACED = re.compile('(?:Sca|UN)')
+
+
+def usage(message=None, exitcode=1, stream=sys.stderr):
+    message = _EMPTY if message is None else 'ERROR: %s' % (message + _EOL * 3)
+
+    stream.write(_EOL)
+    stream.write('Usage: %s <orthogroups.tsv> [unplaced-regex]%s' % (
+        os.path.basename(__file__), _EOL))
+    stream.write(_EOL)
+    stream.write('%s' % message)
+    sys.exit(exitcode)
+    
 
 def main(argv):
+    if len(argv) != 1 and len(argv) != 2:
+        usage('Unexpected number of arguments')
+    
     ortho = OrthoFinderOrthogroups(argv[0])
+    if len(argv) == 2:
+        unplaced = re.compile(argv[1])
+    else:
+        unplaced = re.compile('^$')
     
     M = dict()
     C = set()
@@ -24,12 +43,12 @@ def main(argv):
                 for chr_i in ortho.groups[g][i]:
                     if chr_i is None:
                         continue
-                    if _UNPLACED.search(chr_i[len(ortho.species[i]):]):
+                    if unplaced.search(chr_i[len(ortho.species[i]):]):
                         continue
                     for chr_j in ortho.groups[g][j]:
                         if chr_j is None:
                             continue
-                        if _UNPLACED.search(chr_j[len(ortho.species[j]):]):
+                        if unplaced.search(chr_j[len(ortho.species[j]):]):
                             continue
                         
                         if chr_i not in M:
@@ -50,7 +69,7 @@ def main(argv):
                         C.add(chr_i)
                         C.add(chr_j)
 
-    C = sorted(C)                        
+    C = sorted(C)  # dual purpose, sort and convert a list in one motion
     for i in range(num(ortho.species) - 1):
         C_i = list(filter(lambda c: c.startswith(ortho.species[i]), C))
         for j in range(i + 1, num(ortho.species)):
