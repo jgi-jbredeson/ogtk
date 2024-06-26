@@ -18,7 +18,7 @@ _CS = _COMMA + _SPACE
 
 class Orthogroups(object):
     def __init__(self):
-        self._prefix = ''        
+        self._prefix = ''
         self.species = []
         self.ids = []
         self.clusters = self.ids
@@ -29,6 +29,7 @@ class Orthogroups(object):
         for i in range(num(self.groups)):
             yield (self.ids[i], self.groups[i])
 
+            
     def _join_on_comma(self, l):
         return _EMPTY if l is None else _CS.join(l)
             
@@ -95,19 +96,23 @@ class OrthoFinderOrthogroups(Orthogroups):
             if line == _EMPTY or \
                line.startswith(_COMMENT):
                 continue
-        
-            if line.startswith('HOG') or \
-               line.startswith(self._prefix):
-                if line.startswith('HOG'):
+
+            fields = line.split(_TAB)
+            
+            if ((fields[0] == 'HOG') or 
+                (fields[0] == self._prefix)):
+                if fields[0] == 'HOG':
                     self.clusters = []
                     self.is_hog = True
                     species_field = 3
-                fields = line.split(_TAB)
                 num_fields = num(fields)
                 self.species = list(map(str.strip, fields[species_field:]))
+                need_header = False
                 
             elif num_fields < 0:
-                raise Exception("No header detected in file: %s" % infile)
+                raise Exception("No header detected in file: %s" % (
+                    getattr(infile,'name','<iobuffer>')
+                ))
 
             else:
                 fields = line.split(_TAB)

@@ -76,14 +76,16 @@ class ClusteredOrthogroups(Orthogroups):
             if line == _EMPTY or \
                line.startswith(comment):
                 continue
-        
+            
             if line.startswith(header):
                 fields = line.split(_TAB)
                 num_fields = num(fields)
                 self.species = list(map(str.strip, fields[species_field:]))
                 
             elif num_fields < 0:
-                raise Exception("No header detected in file: %s" % infile)
+                raise Exception("No header detected in file: %s" % (
+                    getattr(infile,'name','<stream>')
+                ))
 
             elif line.startswith(group_tag):
                 cluster_id = line[len(group_tag):].strip()
