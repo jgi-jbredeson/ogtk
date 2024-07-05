@@ -99,15 +99,15 @@ class OrthoFinderOrthogroups(Orthogroups):
 
             fields = line.split(_TAB)
             
-            if ((fields[0] == 'HOG') or 
-                (fields[0] == self._prefix)):
+            if ((num_fields < 0) and 
+                ((fields[0] == 'HOG') or 
+                 (fields[0] == self._prefix))):
                 if fields[0] == 'HOG':
                     self.clusters = []
                     self.is_hog = True
                     species_field = 3
                 num_fields = num(fields)
                 self.species = list(map(str.strip, fields[species_field:]))
-                need_header = False
                 
             elif num_fields < 0:
                 raise Exception("No header detected in file: %s" % (

@@ -77,7 +77,8 @@ class ClusteredOrthogroups(Orthogroups):
                line.startswith(comment):
                 continue
             
-            if line.startswith(header):
+            if ((num_fields < 0) and
+                (line.startswith(header))):
                 fields = line.split(_TAB)
                 num_fields = num(fields)
                 self.species = list(map(str.strip, fields[species_field:]))
