@@ -20,7 +20,7 @@ __program__ = os.path.basename(__file__)
 __pkgname__ = '__PACKAGE_NAME__'
 __version__ = '__PACKAGE_VERSION__'
 __contact__ = '__PACKAGE_CONTACT__'
-__purpose__ = 'Parse OrthoFinder Orthogroups.tsv file'
+__purpose__ = 'Manipulate OrthoFinder orthogroups files'
 
 
 num = len
@@ -66,7 +66,7 @@ def read_order_file(filename):
 
 
 def usage(message=None, exitcode=1, stream=sys.stderr):
-    message = _empty if message is None else 'ERROR: %s\n\n' % message
+    message = _EMPTY if message is None else 'ERROR: %s\n\n' % message
     stream.write("\n")
     stream.write("Program: %s (%s)\n" % (__program__, __purpose__))
     stream.write("Version: %s %s\n" % (__pkgname__, __version__))
