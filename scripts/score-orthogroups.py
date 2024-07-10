@@ -46,22 +46,9 @@ class ClusteredOrthogroups(Orthogroups):
         self.counts = []
         self.clusters = []
         self.probabilities = []
-        
         if infile is not None:
-            if is_stream(infile):
-                # io object
-                self._read_orthogroups_file(infile)
-            else:
-                if 'mode' in kwargs:
-                    if 'a' in kwargs['mode'] or \
-                       'w' in kwargs['mode']:
-                        raise ValueError("%s() constructor is read-only" % (
-                            self.__class__.__name__
-                        ))
-                else:
-                    kwargs['mode'] = 'rt'
-                self._read_orthogroups_file(open(infile, **kwargs))
-
+            self.from_file(infile, **kwargs)
+            
 
     def _read_orthogroups_file(self, infile):
         cluster_id = -1
@@ -85,7 +72,7 @@ class ClusteredOrthogroups(Orthogroups):
                 
             elif num_fields < 0:
                 raise Exception("No header detected in file: %s" % (
-                    getattr(infile,'name','<stream>')
+                    getattr(infile,'name','<iobuffer>')
                 ))
 
             elif line.startswith(group_tag):
@@ -135,13 +122,44 @@ class ClusteredOrthogroups(Orthogroups):
             str(cluster),
             '%g' % prob
         ))
+
+
+    def from_file(self, infile, **kwargs):
+        self.clear()
+        if is_stream(infile):
+            # io object
+            self._read_orthogroups_file(infile)
+        else:
+            if 'mode' in kwargs:
+                if 'a' in kwargs['mode'] or \
+                   'w' in kwargs['mode']:
+                    raise ValueError("%s() constructor is read-only" % (
+                        self.__class__.__name__
+                    ))
+            else:
+                kwargs['mode'] = 'rt'
+            self._read_orthogroups_file(open(infile, **kwargs))
     
 
-    
+    def from_string(self, instring):
+        import io
+        self.clear()
+        self._read_orthogroups_file(io.StringIO(instring))
+        
+            
+    def clear(self):
+        Orthogroups.clear(self)
+        self.counts = []
+        self.clusters = []
+        self.probabilities = []
+
+
+
 class ClusterErrorOrthogroups(ClusteredOrthogroups):
     def __init__(self, infile=None, **kwargs):
         ClusteredOrthogroups.__init__(self, infile, **kwargs)
 
+        
     def format_orthogroups_header(self, species=None, id=None):
         if id is None:
             id = self._prefix
@@ -170,7 +188,8 @@ class ClusterErrorOrthogroups(ClusteredOrthogroups):
 
 def _min0(x):
     return 0.0 if x < 0.0 else x
-    
+
+
 def index_list(lst):
     return { item: i for i, item in enumerate(lst) }
 

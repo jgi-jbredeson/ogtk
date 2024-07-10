@@ -18,11 +18,8 @@ _CS = _COMMA + _SPACE
 
 class Orthogroups(object):
     def __init__(self):
+        self.clear()
         self._prefix = ''
-        self.species = []
-        self.ids = []
-        self.clusters = self.ids
-        self.groups = []
 
         
     def __iter__(self):
@@ -64,28 +61,30 @@ class Orthogroups(object):
             stream.close()
 
 
+    def from_file(self, infile, **kwargs):
+        raise NotImplementedError('from_file()')
+
+
+    def from_string(self, instring):
+        raise NotImplementedError('from_string()')
+
+    
+    def clear(self):
+        self.species = []
+        self.ids = []
+        self.clusters = self.ids
+        self.groups = []
+        
+
 
 class OrthoFinderOrthogroups(Orthogroups):
     def __init__(self, infile=None, **kwargs):
         Orthogroups.__init__(self)
         self._prefix = 'Orthogroup'
         self.is_hog = False
-        
         if infile is not None:
-            if is_stream(infile):
-                # io object
-                self._read_orthogroups_file(infile)
-            else:
-                if 'mode' in kwargs:
-                    if 'a' in kwargs['mode'] or \
-                       'w' in kwargs['mode']:
-                        raise ValueError("%s() constructor is read-only" % (
-                            self.__class__.__name__
-                        ))
-                else:
-                    kwargs['mode'] = 'rt'
-                self._read_orthogroups_file(open(infile, **kwargs))
-
+            self.from_file(infile, **kwargs)
+        
 
     def _read_orthogroups_file(self, infile):
         num_fields = -1
@@ -148,3 +147,31 @@ class OrthoFinderOrthogroups(Orthogroups):
             group = self.groups[index]
         return '%s\t%s' % (str(id), _TAB.join(map(self._join_on_comma, group)))
 
+
+    def from_file(self, infile, **kwargs):
+        self.clear()
+        if is_stream(infile):
+            # io object
+            self._read_orthogroups_file(infile)
+        else:
+            if 'mode' in kwargs:
+                if 'a' in kwargs['mode'] or \
+                   'w' in kwargs['mode']:
+                    raise ValueError("%s() constructor is read-only" % (
+                        self.__class__.__name__
+                    ))
+            else:
+                kwargs['mode'] = 'rt'
+            self._read_orthogroups_file(open(infile, **kwargs))
+
+
+    def from_string(self, instring):
+        import io
+        self.clear()
+        self._read_orthogroups_file(io.StringIO(instring))
+
+        
+    def clear(self):
+        Orthogroups.clear(self)
+        self.is_hog = False
+    
