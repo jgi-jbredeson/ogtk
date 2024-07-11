@@ -14,6 +14,7 @@ import getopt
 
 from math import inf as _POS_INF
 from og.core.io import is_stream
+from og.core.parsers.bed import BEDNameMap
 from og.core.parsers.newick import IntervalNewickTree
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.constants import (
@@ -44,30 +45,6 @@ _STDERR = sys.stderr
 
 num = len
 
-def read_locus_bed(filename):
-    records = dict()
-    with open(filename, 'r') as file:
-        for line in file:
-            line = line.strip()
-
-            if line == _EMPTY or \
-               line.startswith(_COMMENT):
-                continue
-
-            fields = line.split(_TAB)
-            
-            assert num(fields) > 3, "Too few BED fields, expected six: '%s'" % line
-
-            fields[0] = fields[0].strip()
-            fields[3] = fields[3].strip()
-            
-            if fields[3] in records:
-                sys.stderr.write("Duplicate locus ID: %s" % fields[3])
-            else:
-                records[fields[3]] = fields[0]
-                
-    return records
-
 
 
 def read_locus_bed_table(filename):
@@ -83,7 +60,8 @@ def read_locus_bed_table(filename):
             fields = line.split(maxsplit=1)
             fields[0] = fields[0].strip()
             fields[1] = fields[1].strip()
-            locus_bed[fields[0]] = read_locus_bed(fields[1])
+
+            locus_bed[fields[0]] = BEDNameMap(fields[1])
             
     return locus_bed
 
@@ -110,7 +88,7 @@ def _map_loci_to_sequences(locus_list, locus_bed, species_id,
         if locus_name not in locus_bed:
             raise KeyError("Locus ID not found in BED file: %s" % locus_name)
 
-        sequence_name = locus_bed[locus_name]
+        sequence_name = locus_bed[locus_name].chr
         if sequence_name not in count:
             count[sequence_name] = 0        
         if unplaced_re and ignore_unplaced and \

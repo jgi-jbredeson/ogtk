@@ -86,7 +86,7 @@ class OrthoFinderOrthogroups(Orthogroups):
             self.from_file(infile, **kwargs)
         
 
-    def _read_orthogroups_file(self, infile):
+    def _read_file(self, infile):
         num_fields = -1
         species_field = 1
         for line in infile:
@@ -152,7 +152,7 @@ class OrthoFinderOrthogroups(Orthogroups):
         self.clear()
         if is_stream(infile):
             # io object
-            self._read_orthogroups_file(infile)
+            self._read_file(infile)
         else:
             if 'mode' in kwargs:
                 if 'a' in kwargs['mode'] or \
@@ -162,13 +162,14 @@ class OrthoFinderOrthogroups(Orthogroups):
                     ))
             else:
                 kwargs['mode'] = 'rt'
-            self._read_orthogroups_file(open(infile, **kwargs))
+            with open(infile, **kwargs) as fd:
+                self._read_file(fd)
 
 
     def from_string(self, instring):
         import io
         self.clear()
-        self._read_orthogroups_file(io.StringIO(instring))
+        self._read_file(io.StringIO(instring))
 
         
     def clear(self):

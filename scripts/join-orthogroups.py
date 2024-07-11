@@ -6,6 +6,7 @@ import re
 import getopt
 
 from math import inf as _POS_INF
+from og.core.parsers.bed import BEDNameMap
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.constants import (
     _COLON,
@@ -49,7 +50,7 @@ def get_setlist(orthogroup, loctable, unplaced_re=None, chronly=False):
     setlist.ids = orthogroup.ids
 
     def _filter_un(setobj):
-        return filter(lambda gname: not unplaced_re.match(loctable[species][gname][len(species):]), setobj)
+        return filter(lambda gname: not unplaced_re.match(loctable[species][gname].chr[len(species):]), setobj)
 
     _filter = _filter_un if chronly and unplaced_re else lambda s: s
     
@@ -60,32 +61,6 @@ def get_setlist(orthogroup, loctable, unplaced_re=None, chronly=False):
                 setlist.groups[l].update(_filter(orthogroup.groups[l][i]))
     return setlist
     
-
-
-def read_locus_bed(filename):
-    records = dict()
-    with open(filename, 'r') as file:
-        for line in file:
-            line = line.strip()
-
-            if line == _EMPTY or \
-               line.startswith(_COMMENT):
-                continue
-
-            fields = line.split(_TAB)
-            
-            assert num(fields) >= 6, "Too few BED fields, expected six: '%s'" % line
-
-            fields[0] = fields[0].strip()
-            fields[3] = fields[3].strip()
-            
-            if fields[3] in records:
-                sys.stderr.write("Duplicate locus ID: %s" % fields[3])
-            else:
-                records[fields[3]] = fields[0]
-                
-    return records
-
 
 
 def read_locus_bed_table(filename):
@@ -101,7 +76,7 @@ def read_locus_bed_table(filename):
             fields = line.split(maxsplit=1)
             fields[0] = fields[0].strip()
             fields[1] = fields[1].strip()
-            locus_bed[fields[0]] = read_locus_bed(fields[1])
+            locus_bed[fields[0]] = BEDNameMap(fields[1])
             
     return locus_bed
 
@@ -123,7 +98,7 @@ def _map_locus_to_chr(locuslist, locusbed, species, unplaced_re, chronly=False):
         if locusname not in locusbed:
             raise KeyError("Locus ID not in BED: %s" % locusname)
 
-        chrname = locusbed[locusname]
+        chrname = locusbed[locusname].chr
         if chrname not in chrs:
             chrs[chrname] = 0        
         if chronly and \

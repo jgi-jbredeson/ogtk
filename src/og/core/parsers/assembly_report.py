@@ -1,9 +1,15 @@
 
 from og.constants import (
+    _PYTHON_VERSION,
     _COMMENT,
     _TAB
 )
 from ..io import open, is_stream
+
+
+if _PYTHON_VERSION < (3,7):
+    import collections.OrderedDict as dict
+    
 
 num = len
 ROLE_ASM_MOL = 0x1
@@ -25,7 +31,7 @@ UNIT_NONNUCLEAR = 0x8
 TYPE_CHROMOSOME = 0x1
 
 
-class AssemblyReportFileError(Exception):
+class AssemblyReportFormatError(Exception):
     pass
 
 
@@ -65,17 +71,17 @@ class AssemblyReport(dict):
             fields = line.split(_TAB)
 
             if num(fields) != 10:
-                raise AssemblyReportFileError(
+                raise AssemblyReportFormatError(
                     "Ten fields expected, line %d" % line_count
                 )
 
             try:
                 fields[8] = int(fields[8])
             except ValueError:
-                raise AssemblyReportFileError(
+                raise AssemblyReportFormatError(
                     "Numeric field expected, line %d column %d" % (
                         line_count, 9
-                    ))
+                    )) from None
                 
             record = _AssemblyReportRecord(fields[0], fields[8])
 
@@ -142,10 +148,12 @@ class AssemblyReport(dict):
                     ))
             else:
                 kwargs['mode'] = 'rt'
-            self._read_file(open(infile, **kwargs))
+            with open(infile, **kwargs) as fd:
+                self._read_file(fd)
 
 
     def from_string(self, instring):
+        import io
         self.clear()
         self._read_file(io.StringIO(instring))
 
