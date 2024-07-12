@@ -12,23 +12,21 @@ if _PYTHON_VERSION < (3,7):
     
 
 num = len
+
 ROLE_ASM_MOL = 0x1
-ROLE_UNLOC_SCAF = 0x2
-ROLE_UNPLC_SCAF = 0x4
-ROLE_UNLOC_CTG = 0x8
-ROLE_UNPLC_CTG = 0x10
+ROLE_UNPLC_SCAF = 0x2
+ROLE_UNPLC_CTG = 0x4
+ROLE_UNLOC_SCAF = 0x8
+ROLE_UNLOC_CTG = 0x10
 ROLE_ALT_SCAF = 0x20
 ROLE_ALT_CTG = 0x40
 ROLE_FIX_PATCH = 0x80
 ROLE_NOVEL_PATCH = 0x100
-ROLE_IGNORED = 0x200
 
-UNIT_PRIMARY = 0x1
-UNIT_ALTERNATE = 0x2
-UNIT_PATCHES = 0x4
-UNIT_NONNUCLEAR = 0x8
-
-TYPE_CHROMOSOME = 0x1
+UNIT_PRIMARY = 0x200
+UNIT_ALTERNATE = 0x400
+UNIT_PATCHES = 0x800
+UNIT_NONNUCLEAR = 0x1000
 
 
 class AssemblyReportFormatError(Exception):
@@ -37,29 +35,69 @@ class AssemblyReportFormatError(Exception):
 
 class _AssemblyReportRecord(object):
     def __init__(self,
-                 sequence_name, sequence_length=-1, sequence_role=0,
-                 assigned_molecule=-1, assigned_type=0, genbank_accession=None,
-                 refseq_accession=None, assembly_unit=0, ucsc_name=None):
+                 sequence_name, sequence_length=-1, flags=0,
+                 assigned_molecule=None, assigned_type=None,
+                 genbank_accession=None, refseq_accession=None, ucsc_name=None):
         self.sequence_name = sequence_name
-        self.sequence_role = sequence_role
         self.sequence_length = sequence_length
+        self.flags = flags
         self.assigned_molecule = assigned_molecule
-        self.assigned_type = assigned_type
+        self.assigned_type = assigned_type        
         self.genbank_accession = genbank_accession
         self.refseq_accession = refseq_accession
-        self.assembly_unit = assembly_unit
         self.ucsc_name = ucsc_name
-        self.is_chr = False
         
+    @property
+    def is_primary(self):
+        return bool(self.flags & UNIT_PRIMARY)
+
+    @property
+    def is_alternate(self):
+        return bool(self.flags & (
+            UNIT_ALTERNATE | ROLE_ALT_SCAF | ROLE_ALT_CTG
+        ))
+
+    @property
+    def is_patch(self):
+        return bool(self.flags & (
+            UNIT_PATCHES | ROLE_FIX_PATCH | ROLE_NOVEL_PATCH
+        ))
+
+    @property
+    def is_nonnuclear(self):
+        return bool(self.flags & UNIT_NONNUCLEAR)
+
+    @property
+    def is_assembled_molecule(self):
+        return bool(self.flags & ROLE_ASM_MOL)
+
+    @property
+    def is_unplaced(self):
+        return bool(self.flags & (ROLE_UNPLC_CTG | ROLE_UNPLC_SCAF))
+
+    @property
+    def is_unlocalized(self):
+        return bool(self.flags & (ROLE_UNLOC_CTG | ROLE_UNLOC_SCAF))
+    
+    @property
+    def is_placed(self):
+        return not self.is_unplaced
+
+    @property
+    def is_localized(self):
+        return not (self.is_unplaced or self.is_unlocalized)
+
+    
     
 class AssemblyReport(dict):
     def __init__(self, infile=None, **kwargs):
         dict.__init__(self)
+        self.filename = None
         if infile is not None:
             self.from_file(infile, **kwargs)
             
         
-    def _read_file(self, infile):
+    def _parse(self, infile):
         line_count = 0
         for line in infile:
             line = line.lstrip().rstrip('\r\n')
@@ -89,36 +127,35 @@ class AssemblyReport(dict):
             assigned_type = fields[3].lower()
             assembly_unit = fields[7].lower()
             if sequence_role == 'alt-scaffold':
-                record.sequence_role |= ROLE_ALT_SCAF
-                record.assembly_unit |= UNIT_ALTERNATE
+                record.flags |= ROLE_ALT_SCAF
+                record.flags |= UNIT_ALTERNATE
             elif sequence_role == 'alt-contig':
-                record.sequence_role |= ROLE_ALT_CTG
-                record.assembly_unit |= UNIT_ALTERNATE
+                record.flags |= ROLE_ALT_CTG
+                record.flags |= UNIT_ALTERNATE
             elif sequence_role == 'fix-patch':
-                record.sequence_role |= ROLE_FIX_PATCH
+                record.flags |= ROLE_FIX_PATCH
             elif sequence_role == 'novel-patch':
-                record.sequence_role |= ROLE_NOVEL_PATCH
+                record.flags |= ROLE_NOVEL_PATCH
             elif sequence_role == 'assembled-molecule':
-                record.sequence_role |= ROLE_ASM_MOL
+                record.flags |= ROLE_ASM_MOL
             elif sequence_role == 'unlocalized-scaffold':
-                record.sequence_role |= ROLE_UNLOC_SCAF
+                record.flags |= ROLE_UNLOC_SCAF
             elif sequence_role == 'unplaced-scaffold':
-                record.sequence_role |= ROLE_UNPLC_SCAF
+                record.flags |= ROLE_UNPLC_SCAF
             elif sequence_role == 'unlocalized-contig':
-                record.sequence_role |= ROLE_UNLOC_CTG
+                record.flags |= ROLE_UNLOC_CTG
             elif sequence_role == 'unplaced-contig':
-                record.sequence_role |= ROLE_UNPLC_CTG
+                record.flags |= ROLE_UNPLC_CTG
 
             if assigned_type == 'chromosome':
-                record.assigned_type |= TYPE_CHROMOSOME
                 record.assigned_molecule = fields[2]
                 
             if assembly_unit == 'primary assembly':
-                record.assembly_unit |= UNIT_PRIMARY
+                record.flags |= UNIT_PRIMARY
             elif assembly_unit == 'non-nuclear':
-                record.assembly_unit |= UNIT_NONNUCLEAR
+                record.flags |= UNIT_NONNUCLEAR
             elif assembly_unit == 'patches':
-                record.assembly_unit |= UNIT_PATCHES
+                record.flags |= UNIT_PATCHES
                 
             if fields[4].lower() != 'na':
                 record.genbank_accession = fields[4]
@@ -127,18 +164,14 @@ class AssemblyReport(dict):
             if fields[9].lower() != 'na':
                 record.ucsc_name = fields[9]
 
-            if ((record.assembly_unit & UNIT_PRIMARY) and
-                (record.sequence_role & ROLE_ASM_MOL) and
-                (record.assigned_type & TYPE_CHROMOSOME)):
-                record.is_chr = True
-                
             self[record.sequence_name] = record
 
     
     def from_file(self, infile, **kwargs):
         self.clear()
         if is_stream(infile):
-            self._read_file(infile)
+            self.filename = getattr(infile, 'name', None)
+            self._parse(infile)
         else:
             if 'mode' in kwargs:
                 if 'a' in kwargs['mode'] or \
@@ -148,13 +181,19 @@ class AssemblyReport(dict):
                     ))
             else:
                 kwargs['mode'] = 'rt'
+
+            self.filename = infile
             with open(infile, **kwargs) as fd:
-                self._read_file(fd)
+                self._parse(fd)
 
 
     def from_string(self, instring):
         import io
         self.clear()
-        self._read_file(io.StringIO(instring))
+        self._parse(io.StringIO(instring))
 
         
+    def clear(self):
+        dict.clear(self)
+        self.filename = None
+

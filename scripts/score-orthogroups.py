@@ -46,11 +46,12 @@ class ClusteredOrthogroups(Orthogroups):
         self.counts = []
         self.clusters = []
         self.probabilities = []
+        self.filename = None
         if infile is not None:
             self.from_file(infile, **kwargs)
             
 
-    def _read_file(self, infile):
+    def _parse(self, infile):
         cluster_id = -1
         num_fields = -1
         species_field = 2
@@ -128,7 +129,8 @@ class ClusteredOrthogroups(Orthogroups):
         self.clear()
         if is_stream(infile):
             # io object
-            self._read_file(infile)
+            self.filename = getattr(infile, 'name', None)
+            self._parse(infile)
         else:
             if 'mode' in kwargs:
                 if 'a' in kwargs['mode'] or \
@@ -138,14 +140,16 @@ class ClusteredOrthogroups(Orthogroups):
                     ))
             else:
                 kwargs['mode'] = 'rt'
+
+            self.filename = infile
             with open(infile, **kwargs) as fd:
-                self._read_file(fd)
+                self._parse(fd)
     
 
     def from_string(self, instring):
         import io
         self.clear()
-        self._read_file(io.StringIO(instring))
+        self._parse(io.StringIO(instring))
         
             
     def clear(self):
@@ -153,6 +157,7 @@ class ClusteredOrthogroups(Orthogroups):
         self.counts = []
         self.clusters = []
         self.probabilities = []
+        self.filename = None
 
 
 

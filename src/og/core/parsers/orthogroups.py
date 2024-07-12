@@ -15,6 +15,9 @@ num = len
 _CS = _COMMA + _SPACE
 
 
+class OrthogroupsFormatError(Exception):
+    pass
+
 
 class Orthogroups(object):
     def __init__(self):
@@ -82,11 +85,12 @@ class OrthoFinderOrthogroups(Orthogroups):
         Orthogroups.__init__(self)
         self._prefix = 'Orthogroup'
         self.is_hog = False
+        self.filename = None
         if infile is not None:
             self.from_file(infile, **kwargs)
         
 
-    def _read_file(self, infile):
+    def _parse(self, infile):
         num_fields = -1
         species_field = 1
         for line in infile:
@@ -109,8 +113,8 @@ class OrthoFinderOrthogroups(Orthogroups):
                 self.species = list(map(str.strip, fields[species_field:]))
                 
             elif num_fields < 0:
-                raise Exception("No header detected in file: %s" % (
-                    getattr(infile,'name','<iobuffer>')
+                raise OrthogroupsFormatError("No header detected in: %s" % (
+                    str(self.filename)
                 ))
 
             else:
@@ -152,7 +156,8 @@ class OrthoFinderOrthogroups(Orthogroups):
         self.clear()
         if is_stream(infile):
             # io object
-            self._read_file(infile)
+            self.filename = getattr(infile, 'name', None)
+            self._parse(infile)
         else:
             if 'mode' in kwargs:
                 if 'a' in kwargs['mode'] or \
@@ -162,17 +167,20 @@ class OrthoFinderOrthogroups(Orthogroups):
                     ))
             else:
                 kwargs['mode'] = 'rt'
+
+            self.filename = infile
             with open(infile, **kwargs) as fd:
-                self._read_file(fd)
+                self._parse(fd)
 
 
     def from_string(self, instring):
         import io
         self.clear()
-        self._read_file(io.StringIO(instring))
+        self._parse(io.StringIO(instring))
 
         
     def clear(self):
         Orthogroups.clear(self)
+        self.filename = None
         self.is_hog = False
     

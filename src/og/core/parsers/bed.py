@@ -32,12 +32,12 @@ class BEDRecord(object):
 class BED(dict):
     def __init__(self, infile, **kwargs):
         dict.__init__(self)
-        
+        self.filename = None
         if infile is not None:
             self.from_file(infile, **kwargs)
 
 
-    def _read_file(self, infile):
+    def _parse(self, infile):
         line_count = 0
         for line in infile:
             line = line.strip()
@@ -76,7 +76,8 @@ class BED(dict):
     def from_file(self, infile, **kwargs):
         self.clear()
         if is_stream(infile):
-            self._read_file(infile)
+            self.filename = getattr(infile, 'name', None)
+            self._parse(infile)
         else:
             if 'mode' in kwargs:
                 if 'a' in kwargs['mode'] or \
@@ -86,19 +87,25 @@ class BED(dict):
                     ))
             else:
                 kwargs['mode'] = 'rt'
+
+            self.filename = infile
             with open(infile, **kwargs) as fd:
-                self._read_file(fd)
+                self._parse(fd)
 
 
     def from_string(self, instring):
         import io
         self.clear()
-        self._read_file(io.StringIO(instring))
+        self._parse(io.StringIO(instring))
 
 
+    def clear(self):
+        dict.clear(self)
+        self.filename = None
 
+        
 class BEDNameMap(BED):
-    def _read_file(self, infile):
+    def _parse(self, infile):
         line_count = 0
         for line in infile:
             line = line.strip()

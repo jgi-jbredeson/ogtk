@@ -36,7 +36,14 @@ num = len
 
 def _format_id(id):
     return _EMPTY if id is None else str(id)
-        
+
+
+def _format_branch_length(length):
+    if length is None or isinf(length):
+        return _EMPTY
+    return str(length)
+
+
 
 class NewickTreeNode(TreeNode):
     def __init__(self, id=None, length=None, depth=-1):
@@ -73,9 +80,7 @@ class NewickTree(AdjacencyTree):
 
 
     def _format_branch_length(self, length):
-        if length is None:
-            return _EMPTY
-        return str(length)
+        return _format_branch_length(length)
 
     
     def _parse_node_string(self, string, node=None):
@@ -261,12 +266,8 @@ class IntervalNewickTree(NewickTree):
 
     
     def _format_branch_length(self, length):
-        _min = str(length.minimum)
-        _max = str(length.maximum)
-        if isinf(length.minimum):
-            _min = _EMPTY
-        if isinf(length.maximum):
-            _max = _EMPTY
+        _min = _format_branch_length(length.minimum)
+        _max = _format_branch_length(length.maximum)
         if _min is _EMPTY and _max is _EMPTY:
             return _EMPTY
         else:

@@ -11,6 +11,7 @@ from og.core.io import is_stream
 from og.core.parsers.bed import BEDNameMap
 from og.core.parsers.newick import IntervalNewickTree
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
+#from og.core.parsers.assembly_report import AssemblyReport
 from og.constants import _COMMENT, _EMPTY, _TAB
 
 _DEBUG = False
