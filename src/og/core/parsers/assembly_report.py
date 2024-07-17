@@ -197,3 +197,13 @@ class AssemblyReport(dict):
         dict.clear(self)
         self.filename = None
 
+
+
+def is_placed(record):
+    return not (record.is_unplaced or record.assigned_molecule is None)
+
+
+def is_chr(record):
+    return is_placed(record) and record.is_assembled_molecule
+
+

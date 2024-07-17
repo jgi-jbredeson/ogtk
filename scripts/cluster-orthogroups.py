@@ -14,9 +14,10 @@ import getopt
 
 from math import inf as _POS_INF
 from og.core.io import is_stream
-from og.core.parsers.bed import BEDNameMap
-from og.core.parsers.newick import IntervalNewickTree
+from og.core.common import map_loci_to_sequences
+from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
+from og.core.parsers.assembly_report import is_chr, is_placed
 from og.constants import (
     _COMMA,
     _COMMENT,
@@ -47,29 +48,8 @@ num = len
 
 
 
-def read_locus_bed_table(filename):
-    locus_bed = dict()
-    with open(filename, 'r') as file:
-        for line in file:
-            line = line.strip()
-
-            if line == _EMPTY or \
-               line.startswith(_COMMENT):
-                continue
-
-            fields = line.split(maxsplit=1)
-            fields[0] = fields[0].strip()
-            fields[1] = fields[1].strip()
-
-            locus_bed[fields[0]] = BEDNameMap(fields[1])
-            
-    return locus_bed
-
-
-
 def _as_tuples(listobj):
     return tuple(map(lambda l: tuple(l) if l else None, listobj))
-
 
 
 def _as_set(listobj):
@@ -80,45 +60,22 @@ def _as_set(listobj):
     return _set
 
 
-
-def _map_loci_to_sequences(locus_list, locus_bed, species_id,
-                           unplaced_re=None, ignore_unplaced=False):
-    count = dict()
-    for locus_name in locus_list:
-        if locus_name not in locus_bed:
-            raise KeyError("Locus ID not found in BED file: %s" % locus_name)
-
-        sequence_name = locus_bed[locus_name].chr
-        if sequence_name not in count:
-            count[sequence_name] = 0        
-        if unplaced_re and ignore_unplaced and \
-           unplaced_re.search(sequence_name[len(species_id):]):
-            count[sequence_name] -= 1
-        else:
-            count[sequence_name] += 1
-    return count
-
-
-
-def filter_unplaced_sequences(sequences, species_id, unplaced_re=None, ignore_unplaced=False):
-    _chr = set()
-    _uns = set()
-    if unplaced_re is None:
-        unplaced_re = re.compile('^$')
-    for sequence_name in sequences:
-        unplaced = unplaced_re.search(sequence_name[len(species_id):])
-        if ignore_unplaced and unplaced:
+def filter_unplaced_sequences(sequence_names, namemap,
+                              is_placed, ignore_unplaced=False):
+    placed = set()
+    unplaced = set()
+    for sequence_name in sequence_names:
+        if not is_placed(namemap.references[sequence_name]) and ignore_unplaced:
             if ignore_unplaced == _LENIENT:
-                _uns.add(species_id + unplaced.group(0))
+                unplaced.add(namemap.unplaced_id)
         else:
-            _chr.add(sequence_name)
+            placed.add(sequence_name)
     if ignore_unplaced == _LENIENT:
-        if num(_chr) < 1:
-            _chr = _uns
-    return _chr
+        if num(placed) < 1:
+            placed = unplaced
+    return placed
 
                                                
-
 def calc_dist(list_u, list_v, countgaps=False):
     matches = 0.0
     mismatches = 0.0
@@ -142,11 +99,8 @@ def calc_dist(list_u, list_v, countgaps=False):
     return float(mismatches + gaps) / float(max(1, matches + mismatches + gaps))
                 
 
-
-
 def _notNone(obj):
     return obj is not None
-
 
 
 def usage(message=None, exitcode=1, stream=sys.stderr):
@@ -156,11 +110,11 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Version: %s %s\n" % (__pkgname__, __version__))
     stream.write("Contact: %s\n" % __contact__)
     stream.write("\n")
-    stream.write("Usage:   %s [options] <in.tsv> <newick-str>\n" % __program__)
+    stream.write("Usage:   %s [options] <in.tsv> <in.conf>\n" % __program__)
     stream.write("\n")
     stream.write("Options:\n")
-    stream.write("  -b,--locus-bed-table <file>\n")
-    stream.write("     Table of species ID and BED path\n")
+    # stream.write("  -b,--locus-bed-table <file>\n")
+    # stream.write("     Table of species ID and BED path\n")
     stream.write("\n")
     stream.write("  -c,--output-cluster-counts-file <file>\n")
     stream.write("     Write distinct cluster patterns with counts to file.\n")
@@ -174,10 +128,10 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     # stream.write("  -D,--max-distance <ufloat>\n")
     # stream.write("     Maximum distance between orthogroups to cluster [1.0]\n")
     # stream.write("\n")
-    stream.write("  -e,--regex-unplaced <regex>\n")
-    stream.write("     Identify unplaced sequence using the specified regex. Takes effect\n")
-    stream.write("     only when the `-b` option is also enabled [none]\n")
-    stream.write("\n")
+    # stream.write("  -e,--regex-unplaced <regex>\n")
+    # stream.write("     Identify unplaced sequence using the specified regex. Takes effect\n")
+    # stream.write("     only when the `-b` option is also enabled [none]\n")
+    # stream.write("\n")
     stream.write("  -F,--output-cluster-map-file <file>\n")
     stream.write("     Write each cluster ID and member orthogroup ID to file.\n")
     stream.write("\n")    
@@ -205,12 +159,24 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("  -M,--max-members <uint>\n")
     stream.write("     Maximum number of overlapping members between orthogroup sets [inf]\n")
     stream.write("\n")
+    stream.write("  -N,--output-sequence-names\n")
+    stream.write("     Map locus names to sequence names internally, then perform clustering.\n")
+    stream.write("     Write sequence names to output (use `-n` for locus names).\n")
+    stream.write("\n")
+    stream.write("  -n,--map-to-sequence-names\n")
+    stream.write("     Map locus names to sequence names internally, then perform clustering.\n")
+    stream.write("     Write locus names to output (use `-N` for sequence names).\n")
+    stream.write("\n")    
     stream.write("  -s,--min-species <uint>\n")
     stream.write("     Minimum number of species permitted per orthogroup [2]\n")
     stream.write("\n")
     stream.write("  -S,--max-species <uint>\n")
     stream.write("     Maximum number of species permitted per orthogroup [inf]\n")
     stream.write("\n")
+    stream.write("  -u,--ignore-unlocalized\n")
+    stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
+    stream.write("     designated sequence names, not to their placed chromosome names.\n")
+    stream.write("\n")    
     stream.write("  -h,--help\n")
     stream.write("     Print this help message and exit.\n")
     #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
@@ -221,47 +187,46 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     assumes each orthogroup contains sequence names as members or that the\n")
     stream.write("     `-b` option is also enabled to map input locus names to sequence names.\n")
     stream.write("\n")
-    stream.write("  2. The newick-str argument is a Newick-formatted tree string that can be\n")
-    stream.write("     written to filter orthogroups by conditioning on the number of members\n")
-    stream.write("     (locus or sequence IDs) and species at each leaf node and internal\n")
-    stream.write("     node, respectively. In place of Newick branch lengths, however, the\n")
-    stream.write("     admissible number of members and species are specified using unsigned\n")
-    stream.write("     integer number ranges, consisting (inclusively) of the minimum number,\n")
-    stream.write("     a dash (`-`), then maximum number without any intervening whitespace.\n")
-    stream.write("     The minimum or maximum may be omitted to specify open ranges.\n")
-    stream.write("     For example, the tree below can be interpreted as follows:\n")
-    stream.write("         '((A:1, B:-4):1-2, (C:0-1, D):1-):2-4'\n")
-    stream.write("     Leaf node A must have one, and exactly one, member present; leaf node\n")
-    stream.write("     B may have up to four members (inclusive); the A+B subclade (here,\n")
-    stream.write("     represented as an internal node) requires one-to-two (inclusive)\n")
-    stream.write("     species to be be present. Leaf node C must be present at most once.\n")
-    stream.write("     The number of members on leaf node D is unrestricted; and subclade C+D\n")
-    stream.write("     requires at least one species be present. Because of the two subclade-\n")
-    stream.write("     specific constraints, the two-to-four species required at the root\n")
-    stream.write("     will always also be satisfied.\n")
-    #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
-    #            0        10        20        30        40        50        60        70        80
-    stream.write("\n")
-    stream.write("  3. A locus BED table is a two-column file specifying the species IDs\n")
-    stream.write("     (same as used in the Orthogroups.tsv header) and paths to locus BED\n")
-    stream.write("     files. The BED files must contain locus IDs in fourth column and the\n")
-    stream.write("     species IDs prepended to the sequence names (e.g., Hsa1 for chromosomes\n")
-    stream.write("     and HsaSca123 or HsaUn123 for unplaced scaffolds). If a locus BED table\n")
-    stream.write("     is given, then the number of sequences per species is counted as the\n")
-    stream.write("     members rather than locus IDs.\n")
-    stream.write("\n")
+    # stream.write("  2. The newick-str argument is a Newick-formatted tree string that can be\n")
+    # stream.write("     written to filter orthogroups by conditioning on the number of members\n")
+    # stream.write("     (locus or sequence IDs) and species at each leaf node and internal\n")
+    # stream.write("     node, respectively. In place of Newick branch lengths, however, the\n")
+    # stream.write("     admissible number of members and species are specified using unsigned\n")
+    # stream.write("     integer number ranges, consisting (inclusively) of the minimum number,\n")
+    # stream.write("     a dash (`-`), then maximum number without any intervening whitespace.\n")
+    # stream.write("     The minimum or maximum may be omitted to specify open ranges.\n")
+    # stream.write("     For example, the tree below can be interpreted as follows:\n")
+    # stream.write("         '((A:1, B:-4):1-2, (C:0-1, D):1-):2-4'\n")
+    # stream.write("     Leaf node A must have one, and exactly one, member present; leaf node\n")
+    # stream.write("     B may have up to four members (inclusive); the A+B subclade (here,\n")
+    # stream.write("     represented as an internal node) requires one-to-two (inclusive)\n")
+    # stream.write("     species to be be present. Leaf node C must be present at most once.\n")
+    # stream.write("     The number of members on leaf node D is unrestricted; and subclade C+D\n")
+    # stream.write("     requires at least one species be present. Because of the two subclade-\n")
+    # stream.write("     specific constraints, the two-to-four species required at the root\n")
+    # stream.write("     will always also be satisfied.\n")
+    # #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
+    # #            0        10        20        30        40        50        60        70        80
+    # stream.write("\n")
+    # stream.write("  3. A locus BED table is a two-column file specifying the species IDs\n")
+    # stream.write("     (same as used in the Orthogroups.tsv header) and paths to locus BED\n")
+    # stream.write("     files. The BED files must contain locus IDs in fourth column and the\n")
+    # stream.write("     species IDs prepended to the sequence names (e.g., Hsa1 for chromosomes\n")
+    # stream.write("     and HsaSca123 or HsaUn123 for unplaced scaffolds). If a locus BED table\n")
+    # stream.write("     is given, then the number of sequences per species is counted as the\n")
+    # stream.write("     members rather than locus IDs.\n")
+    # stream.write("\n")
     stream.write("\n%s" % message)
     sys.exit(exitcode)
 
     
-
 def main(argv):
-    short_flags = 'hb:c:C:d:D:e:F:g:G:iIm:M:s:S:'
+    short_flags = 'hc:C:d:D:F:g:G:iIm:M:nNs:S:u'
     long_flags = (
         'help',
-        'regex-unplaced=',
         'ignore-unplaced-leniently',
         'ignore-unplaced-strictly',
+        'ignore-unlocalized',
         'min-members=',
         'max-members=',
         'min-orthogroups',
@@ -273,13 +238,13 @@ def main(argv):
         'output-cluster-counts-file-all=',
         'output-cluster-counts-file=',
         'output-cluster-map-file=',
-        'locus-bed-table='
+        'output-sequence-names',
+        'map-to-sequence-names'
     )
     try:
         options, arguments = getopt.getopt(argv, short_flags, long_flags)
     except getopt.GetoptError as error:
         usage(error)
-
 
     min_dist = 0.0
     max_dist = 1.0
@@ -289,26 +254,42 @@ def main(argv):
     max_species = _POS_INF
     min_orthogroups = 1
     max_orthogroups = _POS_INF
-    locus_table = None
     cluster_map_file = False
     cluster_counts_all_file = False
     cluster_counts_mrg_file = False
+    is_localized = is_placed
     ignore_unplaced = False
-    regexp_unplaced = None  # re.compile('^(?:Sca|Un)', flags=re.IGNORECASE)
+    map_seq_names = False
+    output_seq_names = False
     for flag, value in options:
-        if   flag in ('-h','--help'): usage(exitcode=0)
-        elif flag in ('-e','--regex-unplaced'): regexp_unplaced = re.compile(value)
-        elif flag in ('-i','--ignore-unplaced-leniently'): ignore_unplaced = _LENIENT
-        elif flag in ('-I','--ignore-unplaced-strictly'): ignore_unplaced = _STRICT
-        elif flag in ('-b','--locus-bed-table'): locus_table = value
-        elif flag in ('-m','--min-members'): min_members = int(float(value))
-        elif flag in ('-M','--max-members'): max_members = int(float(value))
-        elif flag in ('-g','--min-orthogroups'): min_orthogroups = int(float(value))
-        elif flag in ('-G','--max-orthogroups'): max_orthogroups = int(float(value))
-        elif flag in ('-s','--min-species'): min_species = int(float(value))
-        elif flag in ('-S','--max-species'): max_species = int(float(value))
-        elif flag in ('-d','--min-distance'): min_dist = float(value)
-        elif flag in ('-D','--max-distance'): max_dist = float(value)
+        if   flag in ('-h','--help'):
+            usage(exitcode=0)
+        elif flag in ('-i','--ignore-unplaced-leniently'):
+            ignore_unplaced = _LENIENT
+        elif flag in ('-I','--ignore-unplaced-strictly'):
+            ignore_unplaced = _STRICT
+        elif flag in ('-u','--ignore-unlocalized'):
+            is_localized = is_chr
+        elif flag in ('-m','--min-members'):
+            min_members = int(float(value))
+        elif flag in ('-M','--max-members'):
+            max_members = int(float(value))
+        elif flag in ('-g','--min-orthogroups'):
+            min_orthogroups = int(float(value))
+        elif flag in ('-G','--max-orthogroups'):
+            max_orthogroups = int(float(value))
+        elif flag in ('-s','--min-species'):
+            min_species = int(float(value))
+        elif flag in ('-S','--max-species'):
+            max_species = int(float(value))
+        elif flag in ('-d','--min-distance'):
+            min_dist = float(value)
+        elif flag in ('-D','--max-distance'):
+            max_dist = float(value)
+        elif flag in ('-n','--map-to-sequence-names'):
+            map_seq_names = True
+        elif flag in ('-N','--output-sequence-names'):
+            output_seq_names = map_seq_names = True
         elif flag in ('-C','--output-cluster-counts-file-all'):
             cluster_counts_all_file = open(value, 'wt')
         elif flag in ('-c','--output-cluster-counts-file'):
@@ -319,9 +300,10 @@ def main(argv):
     if num(arguments) != 2:
         usage('Unexpected number of arguments')
 
-    clust = IntervalNewickTree(arguments[1], default_length=(_NEG_INF, _POS_INF))
-    ortho = OrthoFinderOrthogroups(arguments[0])
-    ofile = sys.stdout
+    ortho  = OrthoFinderOrthogroups(arguments[0])
+    config = SpeciesConfig(arguments[1])
+    clust  = config.tree['ploidy']
+    ofile  = sys.stdout
 
     num_species = num(ortho.species)
     species_index = dict(zip(ortho.species, range(num_species)))
@@ -330,14 +312,13 @@ def main(argv):
         min_dist = min_dist / num_species - _EPSILON
     if max_dist >= 1.0:
         max_dist = max_dist / num_species + _EPSILON
-    
-    if locus_table is None:
-        locus = ortho
-    else:
-        locus_table = read_locus_bed_table(locus_table)        
-        for species in ortho.species:
-            if species not in locus_table:
-                raise KeyError("Species not found in locus BED files: %s" % species)
+
+    if map_seq_names:
+        for species_id in ortho.species:
+            if species_id not in config.species:
+                raise KeyError("Species not found in conf file: '%s'" % (
+                    str(species_id)
+                ))
 
         locus = ortho
         ortho = OrthoFinderOrthogroups()
@@ -347,16 +328,17 @@ def main(argv):
         for group in range(num(locus.groups)):
             ortho.groups[group] = [None] * num_species
             for i in range(num_species):
-                sequences = _map_loci_to_sequences(
+                sequences = map_loci_to_sequences(
                     locus.groups[group][i],
-                    locus_table[locus.species[i]],
-                    locus.species[i],
-                    regexp_unplaced,
+                    config.species[locus.species[i]],
+                    is_localized,
                     ignore_unplaced
                 )
                 ortho.groups[group][i] = \
                     sorted(sequences, key=sequences.get, reverse=True)
-                
+    else:
+        locus = ortho
+    
     # TODO:
     #  Instead of using strings in sets, index gene-containing sequences
     #  into bit arrays and use std set operations. Must use numpy.array,
@@ -397,12 +379,14 @@ def main(argv):
         pattern_incl_unanchored = ortho.groups[i]
         pattern_excl_unanchored = [tuple()] * num_species
         for j in range(num_species):
-            pattern_excl_unanchored[j] = tuple(sorted(filter_unplaced_sequences(
-                pattern_incl_unanchored[j],
-                ortho.species[j],
-                regexp_unplaced,
-                ignore_unplaced
-            )))
+            pattern_excl_unanchored[j] = tuple(sorted(
+                filter_unplaced_sequences(
+                    pattern_incl_unanchored[j],
+                    config.species[ortho.species[j]],
+                    is_localized,
+                    ignore_unplaced
+                )
+            ))
         pattern = tuple(pattern_excl_unanchored)
 
         if pattern not in distinct_pattern_index_map:
