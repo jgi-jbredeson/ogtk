@@ -1,0 +1,33 @@
+tree:
+  ploidy: ((Cmi:0-1,Cpl:0-1,Ler:0-1):1-3,(Gga:0-1,Loc:0-1,Xtr:0-1):1-3):3-6
+
+Cmi:
+  loci : /path/to/species/Cmi.locus.bed
+  references : /path/to/species/Cmi.assembly_report.txt
+  unplaced_id : CmiUN
+
+Cpl:
+  loci : /path/to/species/Cpl.locus.bed
+  references : /path/to/species/Cpl.assembly_report.txt
+  unplaced_id : CplUN
+
+Gga:
+  loci : /path/to/species/Gga.locus.bed
+  references : /path/to/species/Gga.assembly_report.txt
+  unplaced_id : GgaUN
+
+Loc:
+  loci : /path/to/species/Loc.locus.bed
+  references : /path/to/species/Loc.assembly_report.txt
+  unplaced_id : LocUN
+
+Lva:
+  loci : /path/to/species/Lva.locus.bed
+  references : /path/to/species/Lva.assembly_report.txt
+  unplaced_id : LvaUN
+  outgroup : True
+
+Xtr:
+  loci : /path/to/species/Xtr.locus.bed
+  references : /path/to/species/Xtr.assembly_report.txt
+  unplaced_id : XtrUN
