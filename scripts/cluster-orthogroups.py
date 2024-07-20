@@ -14,7 +14,9 @@ import getopt
 
 from math import inf as _POS_INF
 from og.core.io import is_stream
+from og.core.common import _LENIENT, _STRICT
 from og.core.common import map_loci_to_sequences
+from og.core.common import filter_unplaced_sequences
 from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr, is_placed
@@ -33,13 +35,13 @@ __version__ = '__PACKAGE_VERSION__'
 __contact__ = '__PACKAGE_CONTACT__'
 __purpose__ = 'Filter OrthoFinder Orthogroups.tsv file'
 
+
 _CLUSTER_ID = "CL{0:05d}".format
 _PATTERN_ID = "{0:s}.{1:d}".format
 _COMMASPACE = _COMMA + _SPACE
 _EPSILON = 1e-6
 _NEG_INF = -1.0 * _POS_INF
-_STRICT = 1
-_LENIENT = 2
+
 _STDOUT = sys.stdout
 _STDERR = sys.stderr
 
@@ -58,22 +60,6 @@ def _as_set(listobj):
         if item is not None:
             _set.update(item)
     return _set
-
-
-def filter_unplaced_sequences(sequence_names, namemap,
-                              is_placed, ignore_unplaced=False):
-    placed = set()
-    unplaced = set()
-    for sequence_name in sequence_names:
-        if not is_placed(namemap.references[sequence_name]) and ignore_unplaced:
-            if ignore_unplaced == _LENIENT:
-                unplaced.add(namemap.unplaced_id)
-        else:
-            placed.add(sequence_name)
-    if ignore_unplaced == _LENIENT:
-        if num(placed) < 1:
-            placed = unplaced
-    return placed
 
                                                
 def calc_dist(list_u, list_v, countgaps=False):
@@ -101,6 +87,8 @@ def calc_dist(list_u, list_v, countgaps=False):
 
 def _notNone(obj):
     return obj is not None
+
+
 
 
 def usage(message=None, exitcode=1, stream=sys.stderr):
@@ -313,6 +301,7 @@ def main(argv):
     if max_dist >= 1.0:
         max_dist = max_dist / num_species + _EPSILON
 
+    locus = ortho
     if map_seq_names:
         for species_id in ortho.species:
             if species_id not in config.species:
@@ -320,7 +309,6 @@ def main(argv):
                     str(species_id)
                 ))
 
-        locus = ortho
         ortho = OrthoFinderOrthogroups()
         ortho.species = locus.species
         ortho.ids = locus.ids
@@ -336,8 +324,6 @@ def main(argv):
                 )
                 ortho.groups[group][i] = \
                     sorted(sequences, key=sequences.get, reverse=True)
-    else:
-        locus = ortho
     
     # TODO:
     #  Instead of using strings in sets, index gene-containing sequences

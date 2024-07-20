@@ -25,8 +25,6 @@ __purpose__ = 'Join OrthoFinder Orthogroups.tsv files'
 num = len
 max_missing_thresh = 2
 
-_STRICT = 1
-
 
 def format_intersection_counts_header():
     return ("q_OG\tq_species\tq_members\t"
@@ -315,12 +313,14 @@ def main(argv):
 
         if output_seq_names:
             for i in range(num(out_species)):
-                out_group[i] = sorted(map_loci_to_sequences(
-                    out_group[i],
-                    config.species[out_species[i]],
-                    is_localized,
-                    ignore_unplaced=False
-                ))
+                out_group[i] = sorted(
+                    map_loci_to_sequences(
+                        out_group[i],
+                        config.species[out_species[i]],
+                        is_localized,
+                        ignore_unplaced=False
+                    )
+                )
                             
         output_file.write(
             out_ortho.format_orthogroups_record(out_id, out_group) + _EOL
@@ -352,12 +352,14 @@ def main(argv):
                 
             if output_seq_names:
                 for i in range(num(out_species)):
-                    out_group[i] = sorted(map_loci_to_sequences(
-                        out_group[i],
-                        config.species[out_species[i]],
-                        is_localized,
-                        ignore_unplaced=False
-                    ))
+                    out_group[i] = sorted(
+                        map_loci_to_sequences(
+                            out_group[i],
+                            config.species[out_species[i]],
+                            is_localized,
+                            ignore_unplaced=False
+                        )
+                    )
                     
             output_file.write(
                 out_ortho.format_orthogroups_record(out_id, out_group) + _EOL

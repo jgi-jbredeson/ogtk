@@ -6,6 +6,7 @@ import getopt
 
 from math import inf as _POS_INF
 from og.core.io import is_stream
+from og.core.common import _LENIENT, _STRICT
 from og.core.common import map_loci_to_sequences
 from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
@@ -27,9 +28,6 @@ __contact__ = '__PACKAGE_CONTACT__'
 __purpose__ = 'Filter OrthoFinder Orthogroups.tsv file'
 
 _NEG_INF = -1.0 * _POS_INF
-_STRICT = 1
-_LENIENT = 2
-
 
 num = len
 
@@ -184,11 +182,7 @@ def main(argv):
     output.species = ortho.species
     for group in range(num(ortho.groups)):
         counts = [0] * num(tree.nodes)
-        if not map_seq_names:
-            for i in tree.terminal_indices:
-                species = tree.nodes[i]
-                counts[i] = num(ortho.groups[group][species_index[species.id]])
-        else:
+        if map_seq_names:
             sequence_names = [tuple()] * num(ortho.species)
             for i in range(num(ortho.species)):
                 sequence_names[i] = map_loci_to_sequences(
@@ -216,6 +210,10 @@ def main(argv):
                     if counts[i] < 1 and \
                        sum(map(lambda c: int(c < 0), sqnames.values())) > 0:
                         counts[i] = species.length.maximum
+        else:
+            for i in tree.terminal_indices:
+                species = tree.nodes[i]
+                counts[i] = num(ortho.groups[group][species_index[species.id]])
 
         passes = True                        
         # anc = ancestor, dsc = descendant

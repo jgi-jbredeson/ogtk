@@ -5,7 +5,7 @@ from og.core.parsers.bed import BEDNameMap
 from og.core.parsers.newick import IntervalNewickTree
 from og.core.parsers.assembly_report import AssemblyReport
 from og.constants import _PYTHON_VERSION
-from ..io import open, is_stream
+from og.core.io import open, is_stream
 
 if _PYTHON_VERSION < (3,7):
     import collections.OrderedDict as dict

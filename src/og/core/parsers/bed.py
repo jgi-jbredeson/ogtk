@@ -5,7 +5,7 @@ from og.constants import (
     _EMPTY,
     _TAB
 )
-from ..io import open, is_stream
+from og.core.io import open, is_stream
 
 
 if _PYTHON_VERSION < (3,7):

@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# TODO: modify to allow reading different file input Orthofinder-like file formats
+
 import os
 
 __authors__ = 'Jessen V. Bredeson'
@@ -14,8 +16,10 @@ import re
 import sys
 import getopt
 
-from og.core.io import open, is_stream
-from og.core.parsers.orthogroups import Orthogroups, OrthoFinderOrthogroups
+from og.core.common import _LENIENT, _STRICT
+from og.core.parsers.config import SpeciesConfig
+from og.core.parsers.orthogroups import OrthoFinderOrthogroups
+from og.core.parsers.assembly_report import is_chr, is_placed
 from og.constants import (
     _COMMA,
     _COMMENT,
@@ -25,8 +29,6 @@ from og.constants import (
 )
 
 _DEBUG = False
-_STRICT = 1
-_LENIENT = 2
 
 num = len
 
@@ -39,14 +41,13 @@ class ProbabilitiesTable(object):
         self.matrix = []
 
         
-class ClusteredOrthogroups(Orthogroups):
+class ClusteredOrthogroups(OrthoFinderOrthogroups):
     def __init__(self, infile=None, **kwargs):
-        Orthogroups.__init__(self)
+        OrthoFinderOrthogroups.__init__(self)
         self._prefix = 'Count\tCluster'
         self.counts = []
         self.clusters = []
         self.probabilities = []
-        self.filename = None
         if infile is not None:
             self.from_file(infile, **kwargs)
             
@@ -122,50 +123,17 @@ class ClusteredOrthogroups(Orthogroups):
             _TAB.join(map(self._join_on_comma, group)),
             str(cluster),
             '%g' % prob
-        ))
-
-
-    def from_file(self, infile, **kwargs):
-        self.clear()
-        if is_stream(infile):
-            # io object
-            self.filename = getattr(infile, 'name', None)
-            self._parse(infile)
-        else:
-            if 'mode' in kwargs:
-                if 'a' in kwargs['mode'] or \
-                   'w' in kwargs['mode']:
-                    raise ValueError("%s() constructor is read-only" % (
-                        self.__class__.__name__
-                    ))
-            else:
-                kwargs['mode'] = 'rt'
-
-            self.filename = infile
-            with open(infile, **kwargs) as fd:
-                self._parse(fd)
-    
-
-    def from_string(self, instring):
-        import io
-        self.clear()
-        self._parse(io.StringIO(instring))
-        
+        ))        
             
     def clear(self):
-        Orthogroups.clear(self)
+        OrthoFinderOrthogroups.clear(self)
         self.counts = []
         self.clusters = []
         self.probabilities = []
-        self.filename = None
 
 
 
 class ClusterErrorOrthogroups(ClusteredOrthogroups):
-    def __init__(self, infile=None, **kwargs):
-        ClusteredOrthogroups.__init__(self, infile, **kwargs)
-
-        
     def format_orthogroups_header(self, species=None, id=None):
         if id is None:
             id = self._prefix
@@ -245,7 +213,7 @@ def _calc_marginal_prob(ortho):
     return mrgnl_freq
 
     
-def calc_conditional_prob(orthoA, orthoB, unplaced_re=None):
+def calc_conditional_prob(orthoA, orthoB, namemap, is_placed, ignore_unplaced=0, init=1e-6):
     """
     Calculate the joint probability of chr and cluster, divided by the marginal
     probability of a chr.
@@ -270,20 +238,22 @@ def calc_conditional_prob(orthoA, orthoB, unplaced_re=None):
             if orthoA.species[s] not in prior_species:
                 continue
             for c in range(num_clusters):
-                prob = 1e-6
+                prob = init
+                count = 0
                 for member in orthoA.groups[g][s]:
-                    if unplaced_re and \
-                       unplaced_re.search(member):
-                        continue
+                    if not is_placed(namemap[s].references[member]):
+                        if ignore_unplaced == _STRICT:
+                            continue
                     try:
                         prob += joint_prob[member][c] / marginal_prob[member]
+                        count += 1
                     except KeyError:
                         pass
                     
                 if cluster_prob[c] < 0:
-                    cluster_prob[c] = prob
+                    cluster_prob[c]  = (prob / float(max(1, count)))
                 else:
-                    cluster_prob[c] *= prob
+                    cluster_prob[c] *= (prob / float(max(1, count)))
 
         cluster_prob = list(map(_min0, cluster_prob))
         cluster_norm = sum(cluster_prob) or 1.0
@@ -320,15 +290,15 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Version: %s %s\n" % (__pkgname__, __version__))
     stream.write("Contact: %s\n" % __contact__)
     stream.write("\n")
-    stream.write("Usage:   %s [options] <classified.tsv> [unclassified.tsv]\n" % __program__)
+    stream.write("Usage:   %s [options] <classified.tsv> [unclassified.tsv] <in.yaml>\n" % __program__)
     stream.write("\n")
     stream.write("Options:\n")
     stream.write("  -E,--check-errors\n")
     stream.write("     Check for classification errors in classified.tsv\n")
     stream.write("\n")
-    stream.write("  -e,--regex-unplaced <regex>\n")
-    stream.write("     Identify unplaced sequence using the specified regex.\n")
-    stream.write("\n")
+    # stream.write("  -e,--regex-unplaced <regex>\n")
+    # stream.write("     Identify unplaced sequence using the specified regex.\n")
+    # stream.write("\n")
     stream.write("  -I,--ignore-unplaced-strictly\n")
     stream.write("     Strictly ignore unplaced sequences in filtering. If a cell in the\n")
     stream.write("     input orthogroups table contains no chromosomal sequences, that cell\n")
@@ -341,6 +311,10 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     sequences, that cell contains members.\n")  # Takes effect only when the\n")
     # stream.write("     `-b` option is also enabled.\n")
     stream.write("\n")
+    stream.write("  -u,--ignore-unlocalized\n")
+    stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
+    stream.write("     designated sequence names, not to their placed chromosome names.\n")
+    stream.write("\n")    
     stream.write("  -h,--help\n")
     stream.write("     Print this help message and exit\n")
     #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
@@ -361,7 +335,9 @@ def main(argv):
     long_options = (
         'help',
         'check-errors',
-        'regex-unplaced=',
+        'ignore-unlocalized',
+        'ignore-unplaced-strictly',
+        'ignore-unplaced-leniently',
     )
     try:
         options, arguments = getopt.getopt(argv, short_options, long_options)
@@ -369,29 +345,31 @@ def main(argv):
         usage(message)
 
     check_errors = False
-    regex_unplaced = None
-    ignore_unplaced = _STRICT
+    is_localized = is_placed
+    ignore_unplaced = _STRICT  # 0
     for flag, value in options:
         if   flag in ('-h','--help'): usage(exitcode=0)
         elif flag in ('-E','--check-errors'): check_errors = True
-        elif flag in ('-e','--regex-unplaced'): regexp_unplaced = re.compile(value)
+        elif flag in ('-e','--ignore-unlocalized'): is_localized = is_chr
         elif flag in ('-i','--ignore-unplaced-leniently'): ignore_unplaced = _LENIENT
         elif flag in ('-I','--ignore-unplaced-strictly'): ignore_unplaced = _STRICT
 
-    if num(arguments) != 1 and \
-       num(arguments) != 2:
+    if num(arguments) != 2 and \
+       num(arguments) != 3:
         usage('Unexpected number of arguments')
 
-    if num(arguments) == 1:
-        arguments.append(arguments[0])
+    if num(arguments) == 2:
+        arguments.append(arguments[1])
+        arguments[1] = arguments[0]
     if check_errors:
         arguments[1] = arguments[0]
 
         
     orthoM = ClusteredOrthogroups(arguments[0])
     orthoU = ClusteredOrthogroups(arguments[1])
-
-    pprobs = calc_conditional_prob(orthoU, orthoM, regexp_unplaced)
+    config = SpeciesConfig(arguments[2])
+    
+    pprobs = calc_conditional_prob(orthoU, orthoM, config, is_localized, ignore_unplaced)
 
     orthoU = assign_clusters(orthoU, pprobs)
 
