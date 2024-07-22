@@ -12,7 +12,7 @@ __contact__ = '__PACKAGE_CONTACT__'
 __purpose__ = 'Use manual clustering to classify new groups'
 
 
-import re
+import io
 import sys
 import getopt
 
@@ -241,7 +241,7 @@ def calc_conditional_prob(orthoA, orthoB, namemap, is_placed, ignore_unplaced=0,
                 prob = init
                 count = 0
                 for member in orthoA.groups[g][s]:
-                    if not is_placed(namemap[s].references[member]):
+                    if not is_placed(namemap.species[orthoA.species[s]].references[member]):
                         if ignore_unplaced == _STRICT:
                             continue
                     try:
@@ -283,6 +283,37 @@ def assign_clusters(ortho, probs):
     return ortho
 
 
+def _copy_to_ClusteredOrthogroups(ortho):
+    clust = ClusteredOrthogroups()
+    clust.species = ortho.species
+    clust.ids = ortho.ids
+    clust.clusters = ortho.ids.copy()
+    clust.groups = ortho.groups
+    clust.counts = [1] * num(ortho.groups)
+    clust.probabilities = [-1] * num(ortho.groups)
+    return clust
+
+
+def open_inferred_format(filename):
+    file = open(filename, 'rt')
+
+    seekable = False
+
+    firstline = next(file)
+    if firstline.startswith('Count\tCluster'):
+        constructor = ClusteredOrthogroups
+    else:
+        constructor = OrthoFinderOrthogroups
+
+    if file.seekable():
+        file.seek(0)
+        return _copy_to_ClusteredOrthogroups(constructor(file))
+    else:
+        return _copy_to_ClusteredOrthogroups(constructor().from_string(
+            io.StringIO(firstline + ''.join(file))
+        ))
+            
+
 def usage(message=None, exitcode=1, stream=sys.stderr):
     message = _EMPTY if message is None else 'ERROR: %s\n\n' % message
     stream.write("\n")
@@ -296,20 +327,15 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("  -E,--check-errors\n")
     stream.write("     Check for classification errors in classified.tsv\n")
     stream.write("\n")
-    # stream.write("  -e,--regex-unplaced <regex>\n")
-    # stream.write("     Identify unplaced sequence using the specified regex.\n")
-    # stream.write("\n")
     stream.write("  -I,--ignore-unplaced-strictly\n")
     stream.write("     Strictly ignore unplaced sequences in filtering. If a cell in the\n")
     stream.write("     input orthogroups table contains no chromosomal sequences, that cell\n")
-    stream.write("     then contains no members.\n")  # Takes effect only when the `-b` option is\n")
-    # stream.write("     also enabled.\n")
+    stream.write("     then contains no members.\n")
     stream.write("\n")
     stream.write("  -i,--ignore-unplaced-leniently\n")
     stream.write("     Leniently ignore unplaced sequences in filtering. If a cell in the\n")
     stream.write("     input orthogroups table contains only unplaced (ie, non-chomosomal)\n")
-    stream.write("     sequences, that cell contains members.\n")  # Takes effect only when the\n")
-    # stream.write("     `-b` option is also enabled.\n")
+    stream.write("     sequences, that cell contains members.\n")
     stream.write("\n")
     stream.write("  -u,--ignore-unlocalized\n")
     stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
@@ -366,7 +392,7 @@ def main(argv):
 
         
     orthoM = ClusteredOrthogroups(arguments[0])
-    orthoU = ClusteredOrthogroups(arguments[1])
+    orthoU = open_inferred_format(arguments[1])
     config = SpeciesConfig(arguments[2])
     
     pprobs = calc_conditional_prob(orthoU, orthoM, config, is_localized, ignore_unplaced)
