@@ -2,32 +2,32 @@ tree:
   ploidy: ((Cmi:0-1,Cpl:0-1,Ler:0-1):1-3,(Gga:0-1,Loc:0-1,Xtr:0-1):1-3):3-6
 
 Cmi:
-  loci : /path/to/species/Cmi.locus.bed
-  references : /path/to/species/Cmi.assembly_report.txt
-  unplaced_id : CmiUN
+  loci : ./Cmi.locus.bed
+  references : ./Cmi.assembly_report.txt
+  unplaced_id : CmiSca
 
 Cpl:
-  loci : /path/to/species/Cpl.locus.bed
-  references : /path/to/species/Cpl.assembly_report.txt
-  unplaced_id : CplUN
+  loci : ./Cpl.locus.bed
+  references : ./Cpl.assembly_report.txt
+  unplaced_id : CplSca
 
 Gga:
-  loci : /path/to/species/Gga.locus.bed
-  references : /path/to/species/Gga.assembly_report.txt
-  unplaced_id : GgaUN
+  loci : ./Gga.locus.bed
+  references : ./Gga.assembly_report.txt
+  unplaced_id : GgaSca
 
 Loc:
-  loci : /path/to/species/Loc.locus.bed
-  references : /path/to/species/Loc.assembly_report.txt
-  unplaced_id : LocUN
+  loci : ./Loc.locus.bed
+  references : ./Loc.assembly_report.txt
+  unplaced_id : LocSca
 
 Lva:
-  loci : /path/to/species/Lva.locus.bed
-  references : /path/to/species/Lva.assembly_report.txt
-  unplaced_id : LvaUN
+  loci : ./Lva.locus.bed
+  references : ./Lva.assembly_report.txt
+  unplaced_id : LvaSca
   outgroup : True
 
 Xtr:
-  loci : /path/to/species/Xtr.locus.bed
-  references : /path/to/species/Xtr.assembly_report.txt
-  unplaced_id : XtrUN
+  loci : ./Xtr.locus.bed
+  references : ./Xtr.assembly_report.txt
+  unplaced_id : XtrSca
