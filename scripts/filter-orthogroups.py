@@ -1,6 +1,15 @@
 #!/usr/bin/env python
 
 import os
+
+__authors__ = 'Jessen V. Bredeson'
+__program__ = os.path.basename(__file__)
+__pkgname__ = '__PACKAGE_NAME__'
+__version__ = '__PACKAGE_VERSION__'
+__contact__ = '__PACKAGE_CONTACT__'
+__purpose__ = 'Filter OrthoFinder Orthogroups.tsv file'
+
+
 import sys
 import getopt
 
@@ -8,6 +17,7 @@ from math import inf as _POS_INF
 from og.core.io import is_stream
 from og.core.common import _LENIENT, _STRICT
 from og.core.common import map_loci_to_sequences
+from og.core.common import filter_unplaced_sequences
 from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr, is_placed
@@ -19,14 +29,6 @@ from og.constants import (
 )
 
 _DEBUG = False
-
-__authors__ = 'Jessen V. Bredeson'
-__program__ = os.path.basename(__file__)
-__pkgname__ = '__PACKAGE_NAME__'
-__version__ = '__PACKAGE_VERSION__'
-__contact__ = '__PACKAGE_CONTACT__'
-__purpose__ = 'Filter OrthoFinder Orthogroups.tsv file'
-
 _NEG_INF = -1.0 * _POS_INF
 
 num = len
@@ -63,6 +65,10 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     stream.write("  -o,--output-file <file>\n")
     stream.write("     Write output to file [stdout]\n")
+    stream.write("\n")
+    stream.write("  -p,--input-sequence-names\n")
+    stream.write("     Locus names have already been mapped to their corresponding sequence\n")
+    stream.write("     names in the input orthogroups file. Perform filtering accordingly.\n")
     stream.write("\n")
     stream.write("  -u,--ignore-unlocalized\n")
     stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
@@ -114,13 +120,14 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     
 
 def main(argv):
-    short_flags = 'hiIuo:Nnv'
+    short_flags = 'ho:iIupNnv'
     long_flags = (
         'help',
         'output-file=',
         'ignore-unplaced-leniently',
         'ignore-unplaced-strictly',
         'ignore-unlocalized',
+        'input-sequence-names',
         'output-sequence-names',
         'map-to-sequence-names',
         'invert-output'
@@ -133,6 +140,7 @@ def main(argv):
     invert = False
     is_localized = is_placed
     map_seq_names = None
+    input_seq_names = False
     output_seq_names = False
     output_file = sys.stdout
     ignore_unplaced = 0
@@ -151,10 +159,12 @@ def main(argv):
             output_seq_names = map_seq_names = True
         elif flag in ('-n','--map-to-sequence-names'):
             map_seq_names = True
+        elif flag in ('-p','--input-sequence-names'):
+            input_seq_names = True
         elif flag in ('-v','--invert-output'):
             invert = True
 
-    if not map_seq_names:
+    if not (input_seq_names or map_seq_names):
         output_seq_names = False
         ignore_unplaced = False
 
@@ -182,38 +192,34 @@ def main(argv):
     output.species = ortho.species
     for group in range(num(ortho.groups)):
         counts = [0] * num(tree.nodes)
+        sequence_names = list(ortho.groups[group])
         if map_seq_names:
-            sequence_names = [tuple()] * num(ortho.species)
-            for i in range(num(ortho.species)):
-                sequence_names[i] = map_loci_to_sequences(
-                    ortho.groups[group][i],
-                    config.species[ortho.species[i]],
+            for s in range(num(ortho.species)):
+                sequence_names[s] = map_loci_to_sequences(
+                    ortho.groups[group][s],
+                    config.species[ortho.species[s]],
                     is_localized,
                     ignore_unplaced
                 )
                 if output_seq_names:
-                    ortho.groups[group][i] = sorted(
-                        sequence_names[i],
-                        key=sequence_names[i].get,
+                    ortho.groups[group][s] = sorted(
+                        sequence_names[s],
+                        key=sequence_names[s].get,
                         reverse=True
                     )
-                    
-            for i in tree.terminal_indices:
-                species = tree.nodes[i]
-                sqnames = sequence_names[species_index[species.id]]
-                counts[i] = sum(map(lambda c: int(c > 0), sqnames.values()))
-
-                # The following conditions allow cells containing only unplaced
-                # scaffolds to contribute toward presence count, and are
-                # otherwise ignored in the presence of chromosome names.
-                if ignore_unplaced == _LENIENT:
-                    if counts[i] < 1 and \
-                       sum(map(lambda c: int(c < 0), sqnames.values())) > 0:
-                        counts[i] = species.length.maximum
+        if input_seq_names or map_seq_names:
+            for s in tree.terminal_indices:
+                species = tree.nodes[s]
+                counts[s] = num(filter_unplaced_sequences(
+                    sequence_names[species_index[species.id]],
+                    config.species[species.id],
+                    is_localized,
+                    ignore_unplaced
+                ))
         else:
-            for i in tree.terminal_indices:
-                species = tree.nodes[i]
-                counts[i] = num(ortho.groups[group][species_index[species.id]])
+            for s in tree.terminal_indices:
+                species = tree.nodes[s]
+                counts[s] = num(ortho.groups[group][species_index[species.id]])
 
         passes = True                        
         # anc = ancestor, dsc = descendant
@@ -243,4 +249,5 @@ def main(argv):
         output_file.close()
 
         
-main(sys.argv[1:])
+if __name__ == '__main__':
+    main(sys.argv[1:])

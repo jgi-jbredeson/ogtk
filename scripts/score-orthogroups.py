@@ -241,7 +241,8 @@ def calc_conditional_prob(orthoA, orthoB, namemap, is_placed, ignore_unplaced=0,
                 prob = init
                 count = 0
                 for member in orthoA.groups[g][s]:
-                    if not is_placed(namemap.species[orthoA.species[s]].references[member]):
+                    if member == namemap.species[orthoA.species[s]].unplaced_id or \
+                       not is_placed(namemap.species[orthoA.species[s]].references[member]):
                         if ignore_unplaced == _STRICT:
                             continue
                     try:
@@ -284,6 +285,8 @@ def assign_clusters(ortho, probs):
 
 
 def _copy_to_ClusteredOrthogroups(ortho):
+    if isinstance(ortho, ClusteredOrthogroups):
+        return ortho
     clust = ClusteredOrthogroups()
     clust.species = ortho.species
     clust.ids = ortho.ids
@@ -295,25 +298,25 @@ def _copy_to_ClusteredOrthogroups(ortho):
 
 
 def open_inferred_format(filename):
-    file = open(filename, 'rt')
+    filehandle = open(filename, 'rt')
 
     seekable = False
 
-    firstline = next(file)
+    firstline = next(filehandle)
     if firstline.startswith('Count\tCluster'):
         constructor = ClusteredOrthogroups
     else:
         constructor = OrthoFinderOrthogroups
 
-    if file.seekable():
-        file.seek(0)
-        return _copy_to_ClusteredOrthogroups(constructor(file))
+    if filehandle.seekable():
+        filehandle.seek(0)
+        return _copy_to_ClusteredOrthogroups(constructor(filehandle))
     else:
-        return _copy_to_ClusteredOrthogroups(constructor().from_string(
-            io.StringIO(firstline + ''.join(file))
-        ))
-            
+        ortho = constructor()
+        ortho.from_string(firstline + ''.join(filehandle))
+        return _copy_to_ClusteredOrthogroups(ortho)
 
+    
 def usage(message=None, exitcode=1, stream=sys.stderr):
     message = _EMPTY if message is None else 'ERROR: %s\n\n' % message
     stream.write("\n")
@@ -347,17 +350,18 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     #            0        10        20        30        40        50        60        70        80
     stream.write("\n")
     stream.write("Notes:\n")
-    stream.write("  classified.tsv is a cluster-orthogroups.tsv *.mrg.counts.tsv output\n")
-    stream.write("  file with lines organzied into larger syntenic groups using some manual\n")
-    stream.write("  algorithm. Clustered lines are headed using `##group=N` meta lines\n")
-    stream.write("  to define the cluster group and their ID (N).\n")
+    stream.write("  classified.tsv is a mrg.counts.tsv file output by cluster-orthogroups.py\n")
+    stream.write("  or an OrthoFinder orthogroups.tsv-formatted files. Lines belonging to the\n")
+    stream.write("  same syntenic groups are expected to be grouped together and such groups\n")
+    stream.write("  preceded by `##group=N` meta lines to demarcate the group and define their\n")
+    stream.write("  cluster ID (N).\n")
     stream.write("\n")
     stream.write("\n%s" % message)
     sys.exit(exitcode)
 
     
 def main(argv):
-    short_options = 'hEe:'
+    short_options = 'hEiIu'
     long_options = (
         'help',
         'check-errors',
@@ -372,11 +376,11 @@ def main(argv):
 
     check_errors = False
     is_localized = is_placed
-    ignore_unplaced = _STRICT  # 0
+    ignore_unplaced = 0  # _STRICT
     for flag, value in options:
         if   flag in ('-h','--help'): usage(exitcode=0)
         elif flag in ('-E','--check-errors'): check_errors = True
-        elif flag in ('-e','--ignore-unlocalized'): is_localized = is_chr
+        elif flag in ('-u','--ignore-unlocalized'): is_localized = is_chr
         elif flag in ('-i','--ignore-unplaced-leniently'): ignore_unplaced = _LENIENT
         elif flag in ('-I','--ignore-unplaced-strictly'): ignore_unplaced = _STRICT
 
