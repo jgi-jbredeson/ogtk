@@ -15,12 +15,13 @@ import getopt
 
 from og.core.io import open, STDIO
 from og.core.utils import count_items
-from og.core.members import _LENIENT, _STRICT, int_placed
+from og.core.members import _LENIENT, _STRICT
 from og.core.members import map_loci_to_sequences
 from og.core.members import filter_unplaced_sequences
 from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
-from og.core.parsers.assembly_report import is_chr, is_placed
+from og.core.parsers.assembly_report import is_chr as _localized
+from og.core.parsers.assembly_report import is_placed as _placed
 from og.constants import _TAB, _SPACE, _EMPTY, _EOL
 
 
@@ -53,12 +54,11 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     stream.write("  -M,--max-count <uint>\n")
     stream.write("     Count up to `-M` number of sequences per species and orthogroup.\n")
-    stream.write("     Counts greater than this threshold are converted to the 'M' character\n")
-    stream.write("     to denote 'Many' or 'Multiple' [2]\n")
+    stream.write("     Counts greater than this threshold are converted to the `M` character\n")
+    stream.write("     to denote `Many` or `Multiple` [2]\n")
     stream.write("\n")
     stream.write("  -n,--map-to-sequence-names\n")
-    stream.write("     Map locus names to sequence names internally, then perform filtering.\n")
-    stream.write("     Write locus names to output (use `-N` for sequence names).\n")
+    stream.write("     Map locus names to sequence names internally, then calculate upset.\n")
     stream.write("\n")
     stream.write("  -o,--output-file <file>\n")
     stream.write("     Write output to file [stdout]\n")
@@ -103,7 +103,7 @@ def main(argv):
 
     group_by = 0
     max_count = 2
-    is_localized = is_placed
+    is_placed = _placed
     map_seq_names = False
     input_seq_names = False
     output_file = STDIO
@@ -126,7 +126,7 @@ def main(argv):
         elif flag in ('-I','--ignore-unplaced-strictly'):
             ignore_unplaced = _STRICT
         elif flag in ('-u','--ignore-unlocalized'):
-            is_localized = is_chr
+            is_placed = _localized
 
     if not (input_seq_names or map_seq_names):
         output_seq_names = False
@@ -148,46 +148,46 @@ def main(argv):
     locus_counts = dict()
     ortho_counts = dict()
     num_species = num(ortho.species)
-    for group in range(num(ortho.groups)):
-        numloci = 0
+    for group_i in range(num(ortho.groups)):
+        num_loci = 0
         pattern = [0] * num_species
         sequence_names = [None] * num_species
         if map_seq_names:
-            for s in range(num_species):
-                sequence_names[s] = map_loci_to_sequences(
-                    ortho.groups[group][s],
-                    config.species[ortho.species[s]],
-                    is_localized,
+            for species_i in range(num_species):
+                sequence_names[species_i] = map_loci_to_sequences(
+                    ortho.groups[group_i][species_i],
+                    config.species[ortho.species[species_i]],
+                    is_placed,
                     ignore_unplaced=False
                 )
         else:  # either loci or pre-mapped sequences:
-            for s in range(num_species):
-                sequence_names[s] = count_items(
-                    ortho.groups[group][s]
+            for species_i in range(num_species):
+                sequence_names[species_i] = count_items(
+                    ortho.groups[group_i][species_i]
                 )
                  
         if input_seq_names or map_seq_names:
-            for s in range(num_species):
+            for species_i in range(num_species):
                 names = filter_unplaced_sequences(
-                    sequence_names[s],
-                    config.species[ortho.species[s]],
-                    is_localized,
+                    sequence_names[species_i],
+                    config.species[ortho.species[species_i]],
+                    is_placed,
                     ignore_unplaced,
                     aggregate_unplaced=False
                 )
-                pattern[s] = 'M' if num(names) > max_count else str(num(names))
-                numloci += sum(map(sequence_names[s].get, names))
+                pattern[species_i] = 'M' if num(names) > max_count else str(num(names))
+                num_loci += sum(map(sequence_names[species_i].get, names))
         else:
-            for s in range(num_species):
-                names = ortho.groups[group][s]
-                pattern[s] = 'M' if num(names) > max_count else str(num(names))
-                numloci += num(names)
+            for species_i in range(num_species):
+                names = ortho.groups[group_i][species_i]
+                pattern[species_i] = 'M' if num(names) > max_count else str(num(names))
+                num_loci += num(names)
 
         try:
-            locus_counts[tuple(pattern)] += numloci
+            locus_counts[tuple(pattern)] += num_loci
             ortho_counts[tuple(pattern)] += 1
         except KeyError:
-            locus_counts[tuple(pattern)] = numloci
+            locus_counts[tuple(pattern)] = num_loci
             ortho_counts[tuple(pattern)] = 1
             
     output.write(

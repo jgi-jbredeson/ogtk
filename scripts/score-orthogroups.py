@@ -19,7 +19,8 @@ import getopt
 from og.core.members import _LENIENT, _STRICT
 from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
-from og.core.parsers.assembly_report import is_chr, is_placed
+from og.core.parsers.assembly_report import is_chr as _localized
+from og.core.parsers.assembly_report import is_placed as _placed
 from og.constants import (
     _COMMA,
     _COMMENT,
@@ -213,7 +214,7 @@ def _calc_marginal_prob(ortho):
     return mrgnl_freq
 
     
-def calc_conditional_prob(orthoA, orthoB, namemap, is_placed, ignore_unplaced=0, init=1e-6):
+def calc_conditional_prob(orthoA, orthoB, namemap, is_placed=_placed, ignore_unplaced=0, init=1e-6):
     """
     Calculate the joint probability of chr and cluster, divided by the marginal
     probability of a chr.
@@ -375,12 +376,12 @@ def main(argv):
         usage(message)
 
     check_errors = False
-    is_localized = is_placed
+    is_placed = _placed
     ignore_unplaced = 0  # _STRICT
     for flag, value in options:
         if   flag in ('-h','--help'): usage(exitcode=0)
         elif flag in ('-E','--check-errors'): check_errors = True
-        elif flag in ('-u','--ignore-unlocalized'): is_localized = is_chr
+        elif flag in ('-u','--ignore-unlocalized'): is_placed = _localized
         elif flag in ('-i','--ignore-unplaced-leniently'): ignore_unplaced = _LENIENT
         elif flag in ('-I','--ignore-unplaced-strictly'): ignore_unplaced = _STRICT
 
@@ -399,7 +400,7 @@ def main(argv):
     orthoU = open_inferred_format(arguments[1])
     config = SpeciesConfig(arguments[2], load_files=True)
     
-    pprobs = calc_conditional_prob(orthoU, orthoM, config, is_localized, ignore_unplaced)
+    pprobs = calc_conditional_prob(orthoU, orthoM, config, is_placed, ignore_unplaced)
 
     orthoU = assign_clusters(orthoU, pprobs)
 

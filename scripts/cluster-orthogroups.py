@@ -22,7 +22,9 @@ from og.core.members import map_loci_to_sequences
 from og.core.members import filter_unplaced_sequences
 from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
-from og.core.parsers.assembly_report import is_chr, is_placed
+from og.core.parsers.assembly_report import is_chr as _localized
+from og.core.parsers.assembly_report import is_placed as _placed
+
 from og.constants import (
     _COMMA,
     _COMMENT,
@@ -248,7 +250,7 @@ def main(argv):
     cluster_map_file = False
     cluster_counts_all_file = False
     cluster_counts_mrg_file = False
-    is_localized = is_placed
+    is_placed = _placed
     ignore_unplaced = False
     map_seq_names = False
     output_seq_names = False
@@ -260,7 +262,7 @@ def main(argv):
         elif flag in ('-I','--ignore-unplaced-strictly'):
             ignore_unplaced = _STRICT
         elif flag in ('-u','--ignore-unlocalized'):
-            is_localized = is_chr
+            is_placed = _localized
         elif flag in ('-m','--min-members'):
             min_members = int(float(value))
         elif flag in ('-M','--max-members'):
@@ -322,7 +324,7 @@ def main(argv):
                 sequences = map_loci_to_sequences(
                     locus.groups[group][i],
                     config.species[locus.species[i]],
-                    is_localized,
+                    is_placed,
                     ignore_unplaced
                 )
                 ortho.groups[group][i] = \
@@ -372,7 +374,7 @@ def main(argv):
                 filter_unplaced_sequences(
                     pattern_incl_unanchored[j],
                     config.species[ortho.species[j]],
-                    is_localized,
+                    is_placed,
                     ignore_unplaced
                 )
             ))

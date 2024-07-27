@@ -5,15 +5,36 @@ _LENIENT = 2
 
 num = len
 
+from og.core.parsers.assembly_report import is_placed as _placed
 
-def int_placed(record, is_placed, ignore_unplaced=False):
+def int_placed(record, is_placed=_placed, ignore_unplaced=False):
     if ignore_unplaced and not is_placed(record):
         return -1 * int(ignore_unplaced == _LENIENT)
     return +1
 
 
+def _map_loci_to_sequences(locus_names, namemap, is_placed=_placed):
+    for locus_name in locus_names:
+        if locus_name not in namemap.loci:
+            raise KeyError(
+                "Locus name not found in loci: %s" % locus_name
+            )
+
+        sequence_name = namemap.loci[locus_name].chr
+        if sequence_name not in namemap.references:
+            raise KeyError(
+                "Sequence name not found in references: %s" % sequence_name
+            )
+
+        if is_placed(namemap.references[sequence_name]):
+            sequence_name = \
+                namemap.references[sequence_name].assigned_molecule
+
+        yield sequence_name
+        
+
 def map_loci_to_sequences(locus_names, namemap,
-                          is_placed, ignore_unplaced=False):
+                          is_placed=_placed, ignore_unplaced=False):
     count = dict()
     for locus_name in locus_names:
         if locus_name not in namemap.loci:
@@ -45,7 +66,7 @@ def map_loci_to_sequences(locus_names, namemap,
     return count
 
 
-def filter_unplaced_sequences(sequence_names, namemap, is_placed,
+def filter_unplaced_sequences(sequence_names, namemap, is_placed=_placed,
                               ignore_unplaced=False, aggregate_unplaced=True):
     placed = set()
     unplaced = set()
@@ -54,17 +75,23 @@ def filter_unplaced_sequences(sequence_names, namemap, is_placed,
             raise KeyError(
                 "Sequence name not found in references: %s" % sequence_name
             )
-        if ignore_unplaced and \
-           not is_placed(namemap.references[sequence_name]):
+
+        increment_unit = 1
+        if is_placed(namemap.references[sequence_name]):
+            sequence_name = \
+                namemap.references[sequence_name].assigned_molecule
+        elif ignore_unplaced:
             if ignore_unplaced == _LENIENT:
                 unplaced.add(
                     namemap.unplaced_id \
                     if   aggregate_unplaced \
                     else sequence_name
                 )
-        else:
-            placed.add(sequence_name)
+            increment_unit = 0
 
+        if increment_unit:
+            placed.add(sequence_name)
+            
     if ignore_unplaced == _LENIENT:
         if num(placed) < 1:
             placed = unplaced

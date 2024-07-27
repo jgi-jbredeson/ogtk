@@ -9,7 +9,8 @@ from og.core.utils import index_list
 from og.core.members import map_loci_to_sequences
 from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
-from og.core.parsers.assembly_report import is_chr, is_placed
+from og.core.parsers.assembly_report import is_chr as _localized
+from og.core.parsers.assembly_report import is_placed as _placed
 from og.constants import (
     _COLON,
     _COMMENT,
@@ -147,7 +148,7 @@ def main(argv):
     except getopt.GetoptError as error:
         usage(error)
 
-    is_localized = is_placed
+    is_placed = _placed
     min_queries = 0
     max_queries = _POS_INF
     min_targets = 0
@@ -187,7 +188,7 @@ def main(argv):
         elif flag in ('-L','--left-outer-join'):
             left_outer_join = True
         elif flag in ('-u','--ignore-unlocalized'):
-            is_localized = is_chr
+            is_placed = _localized
 
     if num(arguments) < 2 or num(arguments) > 3:
         usage('Unexpected number of arguments')
@@ -198,7 +199,7 @@ def main(argv):
         
     if output_seq_names:
         if num(arguments) != 3:
-            usage('--output-seq-names requested, but no YAML file given')
+            usage('--output-sequence-names requested, but no YAML file given')
         config = SpeciesConfig(arguments[2], load_files=True)
 
         for species_id in qry_ortho.species:
@@ -312,7 +313,7 @@ def main(argv):
                     map_loci_to_sequences(
                         out_group[i],
                         config.species[out_species[i]],
-                        is_localized,
+                        is_placed,
                         ignore_unplaced=False
                     )
                 )
@@ -351,7 +352,7 @@ def main(argv):
                         map_loci_to_sequences(
                             out_group[i],
                             config.species[out_species[i]],
-                            is_localized,
+                            is_placed,
                             ignore_unplaced=False
                         )
                     )

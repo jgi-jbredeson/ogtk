@@ -21,7 +21,8 @@ from og.core.members import map_loci_to_sequences
 from og.core.members import filter_unplaced_sequences
 from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
-from og.core.parsers.assembly_report import is_chr, is_placed
+from og.core.parsers.assembly_report import is_chr as _localized
+from og.core.parsers.assembly_report import is_placed as _placed
 from og.constants import (
     _COMMENT,
     _EMPTY,
@@ -139,7 +140,7 @@ def main(argv):
         usage(error)
 
     invert = False
-    is_localized = is_placed
+    is_placed = _placed
     map_seq_names = None
     input_seq_names = False
     output_seq_names = False
@@ -155,7 +156,7 @@ def main(argv):
         elif flag in ('-I','--ignore-unplaced-strictly'):
             ignore_unplaced = _STRICT
         elif flag in ('-u','--ignore-unlocalized'):
-            is_localized = is_chr
+            is_placed = _localized
         elif flag in ('-N','--output-sequence-names'):
             output_seq_names = map_seq_names = True
         elif flag in ('-n','--map-to-sequence-names'):
@@ -199,7 +200,7 @@ def main(argv):
                 sequence_names[s] = map_loci_to_sequences(
                     ortho.groups[group][s],
                     config.species[ortho.species[s]],
-                    is_localized,
+                    is_placed,
                     ignore_unplaced
                 )
                 if output_seq_names:
@@ -214,7 +215,7 @@ def main(argv):
                 counts[s] = num(filter_unplaced_sequences(
                     sequence_names[species_index[species.id]],
                     config.species[species.id],
-                    is_localized,
+                    is_placed,
                     ignore_unplaced
                 ))
         else:
