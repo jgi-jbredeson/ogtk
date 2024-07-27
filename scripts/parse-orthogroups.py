@@ -6,6 +6,7 @@ import sys
 from getopt import getopt, GetoptError
 #from fastx.utils.io import load_listfile    
 from og.core.io import is_stream
+from og.core.utils import index_list
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.constants import (
     _COMMA,
@@ -140,7 +141,7 @@ def main(argv):
             species_prefix = True
         elif flag in ('-S','--species-order','--species-order-file'):
             newspecies = read_order_file(value)
-            newindices = dict(zip(newspecies, range(len(newspecies))))
+            newindices = index_list(newspecies)
         elif flag in ('-v','--orthovenn'):
             output_type = 'V'
         elif flag in ('-h','--help'):
@@ -158,7 +159,7 @@ def main(argv):
     ortho = OrthoFinderOrthogroups(arguments[0])
     
     oldspecies = ortho.species
-    oldindices = dict(zip(oldspecies, range(len(oldspecies))))
+    oldindices = index_list(oldspecies)
 
     if newspecies is None:
         newspecies = oldspecies

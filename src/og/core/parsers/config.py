@@ -40,11 +40,13 @@ class _SpeciesRecord(object):
         
 
 class SpeciesConfig(object):
-    def __init__(self, infile):
+    def __init__(self, infile, load_files=False):
         self.clear()
         self.filename = None
         if infile is not None:
             self.from_file(infile)
+        if load_files:
+            self.load_files()
 
             
     def _parse(self, infile):
@@ -63,12 +65,12 @@ class SpeciesConfig(object):
             else:  # a species ID
                 self.species[section] = _SpeciesRecord(species=section)
                 if 'loci' in yamldata[section]:
-                    self.species[section].loci = BEDNameMap(yamldata[section]['loci'])
+                    self.species[section].loci = yamldata[section]['loci']  # BEDNameMap(yamldata[section]['loci'])
                 else:
                     raise ValueError('`loci` key not defined for %s' % section)
                 
                 if 'references' in yamldata[section]:
-                    self.species[section].references = AssemblyReport(yamldata[section]['references'])
+                    self.species[section].references = yamldata[section]['references'] # AssemblyReport(yamldata[section]['references'])
                 else:
                     raise ValueError('`references` key not defined for %s' % section)
                 
@@ -85,6 +87,14 @@ class SpeciesConfig(object):
                 else:
                     self._ingroup.append(section)
 
+
+    def load_files(self):
+        for species in self.species:
+            if isinstance(self.species[species].loci, (str, bytes)):
+                self.species[species].loci = BEDNameMap(self.species[species].loci)
+            if isinstance(self.species[species].references, (str, bytes)):
+                self.species[species].references = AssemblyReport(self.species[species].references)
+                
                     
     def from_file(self, infile, **kwargs):
         if is_stream(infile):

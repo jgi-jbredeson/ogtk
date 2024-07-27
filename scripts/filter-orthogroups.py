@@ -15,9 +15,10 @@ import getopt
 
 from math import inf as _POS_INF
 from og.core.io import is_stream
-from og.core.common import _LENIENT, _STRICT
-from og.core.common import map_loci_to_sequences
-from og.core.common import filter_unplaced_sequences
+from og.core.utils import index_list
+from og.core.members import _LENIENT, _STRICT
+from og.core.members import map_loci_to_sequences
+from og.core.members import filter_unplaced_sequences
 from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr, is_placed
@@ -172,10 +173,10 @@ def main(argv):
         usage('Unexpected number of arguments')
 
     ortho = OrthoFinderOrthogroups(arguments[0])
-    config = SpeciesConfig(arguments[1])
+    config = SpeciesConfig(arguments[1], load_files=True)
     tree = config.tree['ploidy']
     
-    species_index = dict(zip(ortho.species, range(num(ortho.species))))
+    species_index = index_list(ortho.species)
 
     for species in tree.terminal_nodes:
         if species.id not in species_index:

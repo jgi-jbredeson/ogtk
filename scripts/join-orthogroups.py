@@ -5,7 +5,8 @@ import sys
 import getopt
 
 from math import inf as _POS_INF
-from og.core.common import map_loci_to_sequences
+from og.core.utils import index_list
+from og.core.members import map_loci_to_sequences
 from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr, is_placed
@@ -198,7 +199,7 @@ def main(argv):
     if output_seq_names:
         if num(arguments) != 3:
             usage('--output-seq-names requested, but no YAML file given')
-        config = SpeciesConfig(arguments[2])
+        config = SpeciesConfig(arguments[2], load_files=True)
 
         for species_id in qry_ortho.species:
             if species_id not in config.species:
@@ -223,14 +224,8 @@ def main(argv):
         len(tuple(filter(_isnotNone, group))) for group in trg_ortho.groups
     ]
 
-    qry_species_index = dict(zip(
-        qry_ortho.species,
-        range(num(qry_ortho.species))
-    ))
-    trg_species_index = dict(zip(
-        trg_ortho.species,
-        range(num(trg_ortho.species))
-    ))
+    qry_species_index = index_list(qry_ortho.species)
+    trg_species_index = index_list(trg_ortho.species)
 
     qry_counts = [0] * num(qry_ortho.groups)
     trg_counts = [0] * num(trg_ortho.groups)

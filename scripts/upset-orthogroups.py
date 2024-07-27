@@ -1,17 +1,6 @@
 #!/usr/bin/env python
 
 import os
-import sys
-import getopt
-
-from og.core.io import open, STDIO
-from og.core.common import _LENIENT, _STRICT
-from og.core.common import map_loci_to_sequences
-from og.core.common import filter_unplaced_sequences
-from og.core.parsers.config import SpeciesConfig
-from og.core.parsers.orthogroups import OrthoFinderOrthogroups
-from og.core.parsers.assembly_report import is_chr, is_placed
-from og.constants import _TAB, _SPACE, _EMPTY, _EOL
 
 __authors__ = 'Jessen V. Bredeson'
 __program__ = os.path.basename(__file__)
@@ -19,6 +8,20 @@ __pkgname__ = '__PACKAGE_NAME__'
 __version__ = '__PACKAGE_VERSION__'
 __contact__ = '__PACKAGE_CONTACT__'
 __purpose__ = 'Filter OrthoFinder Orthogroups.tsv file'
+
+
+import sys
+import getopt
+
+from og.core.io import open, STDIO
+from og.core.utils import count_items
+from og.core.members import _LENIENT, _STRICT, int_placed
+from og.core.members import map_loci_to_sequences
+from og.core.members import filter_unplaced_sequences
+from og.core.parsers.config import SpeciesConfig
+from og.core.parsers.orthogroups import OrthoFinderOrthogroups
+from og.core.parsers.assembly_report import is_chr, is_placed
+from og.constants import _TAB, _SPACE, _EMPTY, _EOL
 
 
 num = len
@@ -133,7 +136,7 @@ def main(argv):
         usage('Unexpected number of arguments')
 
     ortho  = OrthoFinderOrthogroups(arguments[0])
-    config = SpeciesConfig(arguments[1])
+    config = SpeciesConfig(arguments[1], load_files=True)
     output = open(output_file, 'w')
     
     for species_id in ortho.species:
@@ -141,42 +144,59 @@ def main(argv):
             raise KeyError("Species not found in YAML file: '%s'" % (
                 str(species_id)
             ))
-        
+
     locus_counts = dict()
     ortho_counts = dict()
     num_species = num(ortho.species)
     for group in range(num(ortho.groups)):
+        numloci = 0
         pattern = [0] * num_species
-        sequence_names = list(ortho.groups[group])
+        sequence_names = [None] * num_species
         if map_seq_names:
             for s in range(num_species):
                 sequence_names[s] = map_loci_to_sequences(
                     ortho.groups[group][s],
                     config.species[ortho.species[s]],
                     is_localized,
-                    ignore_unplaced
+                    ignore_unplaced=False
+                )
+        else:  # either loci or pre-mapped sequences:
+            for s in range(num_species):
+                sequence_names[s] = count_items(
+                    ortho.groups[group][s]
                 )
                  
         if input_seq_names or map_seq_names:
             for s in range(num_species):
-                pattern[s] = num(filter_unplaced_sequences(
+                names = filter_unplaced_sequences(
                     sequence_names[s],
                     config.species[ortho.species[s]],
                     is_localized,
-                    ignore_unplaced
-                ))
-                pattern[s] = 'M' if pattern[s] > max_count else str(pattern[s])
+                    ignore_unplaced,
+                    aggregate_unplaced=False
+                )
+                pattern[s] = 'M' if num(names) > max_count else str(num(names))
+                numloci += sum(map(sequence_names[s].get, names))
         else:
             for s in range(num_species):
-                pattern[s] = num(ortho.groups[group][s])
-                pattern[s] = 'M' if pattern[s] > max_count else str(pattern[s])
+                names = ortho.groups[group][s]
+                pattern[s] = 'M' if num(names) > max_count else str(num(names))
+                numloci += num(names)
 
         try:
+            locus_counts[tuple(pattern)] += numloci
             ortho_counts[tuple(pattern)] += 1
         except KeyError:
+            locus_counts[tuple(pattern)] = numloci
             ortho_counts[tuple(pattern)] = 1
-
-    output.write(_SPACE.join(ortho.species) + _TAB + 'Count' + _EOL)
+            
+    output.write(
+        _TAB.join((
+            _SPACE.join(ortho.species),
+            'Clusters',
+            'Proteins'
+        )) + _EOL
+    )
     if group_by & _MEMBERSHIP:
         group_patterns = dict()
         group_counts = dict()
@@ -192,12 +212,20 @@ def main(argv):
             output.write("##total=%d\n" % group_counts[_pattern])
             for pattern in sorted(group_patterns[_pattern], key=group_patterns[_pattern].get, reverse=True):
                 output.write(
-                    _SPACE.join(pattern) + _TAB + str(ortho_counts[pattern]) + _EOL
+                    _TAB.join((
+                        _SPACE.join(pattern),
+                        str(ortho_counts[pattern]),
+                        str(locus_counts[pattern])
+                    )) + _EOL
                 )
     else:
         for pattern in sorted(ortho_counts, key=ortho_counts.get, reverse=True):
             output.write(
-                _SPACE.join(pattern) + _TAB + str(ortho_counts[pattern]) + _EOL
+                _TAB.join((
+                    _SPACE.join(pattern),
+                    str(ortho_counts[pattern]),
+                    str(locus_counts[pattern])
+                )) + _EOL
             )
             
     output.close()

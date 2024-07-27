@@ -16,7 +16,7 @@ import io
 import sys
 import getopt
 
-from og.core.common import _LENIENT, _STRICT
+from og.core.members import _LENIENT, _STRICT
 from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr, is_placed
@@ -397,7 +397,7 @@ def main(argv):
         
     orthoM = ClusteredOrthogroups(arguments[0])
     orthoU = open_inferred_format(arguments[1])
-    config = SpeciesConfig(arguments[2])
+    config = SpeciesConfig(arguments[2], load_files=True)
     
     pprobs = calc_conditional_prob(orthoU, orthoM, config, is_localized, ignore_unplaced)
 
