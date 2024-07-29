@@ -1,50 +1,39 @@
 #!/usr/bin/env Rscript
 
+# require(viridis)
+
 args = commandArgs(TRUE)
 
-d = read.table(args[[1]], stringsAsFactors=FALSE, header=TRUE)
-M.obs = as.matrix(d[,2:ncol(d)])
-rownames(M.obs) = d[,1]
-
-
-# r.sizes = read.table(args[[2]], stringsAsFactors=FALSE, header=FALSE)
-# r.names = r.sizes[,1]
-# r.sizes = r.sizes[,2]
-# names(r.sizes) = r.names
-
-# c.sizes = read.table(args[[3]], stringsAsFactors=FALSE, header=FALSE)
-# c.names = c.sizes[,1]
-# c.sizes = c.sizes[,2]
-# names(c.sizes) = c.names
-
-# # subset and reorder
-# r.sizes = r.sizes[rownames(M.obs)]
-# c.sizes = c.sizes[colnames(M.obs)]
+M.obs = as.matrix(read.table(args[[1]], stringsAsFactors=FALSE, row.names=1, header=TRUE))
 
 r.sizes = apply(M.obs, 1, sum)
-names(r.sizes) = rownames(M.obs)
-
 c.sizes = apply(M.obs, 2, sum)
-names(c.sizes) = colnames(M.obs)
 
 r.exp = r.sizes / sum(r.sizes, na.rm=TRUE)
 c.exp = c.sizes / sum(c.sizes, na.rm=TRUE)
 
 
 M.exp = sum(M.obs) * (r.exp %*% t(c.exp))
-M.fit = M.obs >= 3 & M.exp > 0 & M.obs >= M.exp
+M.ind = matrix(0, nrow(M.exp), ncol(M.exp))
+M.ind[(M.obs >= 3) & (M.exp > 0) & (M.obs >= M.exp)] = 1
 
-pdf(sprintf("%s.obs.pdf", args[[2]]))
-image((seq(nrow(M.obs))-1)/(nrow(M.obs)-1), (seq(ncol(M.obs))-1)/(ncol(M.obs)-1), z=M.obs, axes=FALSE, xlab="", ylab="")
+kwb = colorRampPalette(c("black","white","blue"))
+
+M.diff = M.obs - M.exp
+z.lim = 0.25 * max(abs(M.diff))
+M.diff[M.diff < -z.lim] = -z.lim
+M.diff[M.diff > +z.lim] = +z.lim
+
+pdf(sprintf("%s.pdf", args[[2]]))
+image(
+  (seq(nrow(M.obs))-1)/(nrow(M.obs)-1),
+  (seq(ncol(M.obs))-1)/(ncol(M.obs)-1),
+  z=M.diff,
+  zlim=z.lim*c(-1.0,1.0),
+  axes=FALSE, xlab="", ylab="", col=kwb(length(unique(c(M.diff)))))
 axis(1, at=(seq(nrow(M.obs))-1)/(nrow(M.obs)-1), labels=rownames(M.obs), cex.lab=0.5, las=2)
 axis(2, at=(seq(ncol(M.obs))-1)/(ncol(M.obs)-1), labels=colnames(M.obs), cex.lab=0.5, las=2)
-dev.off()
 
-pdf(sprintf("%s.pass.pdf", args[[2]]))
-image((seq(nrow(M.fit))-1)/(nrow(M.fit)-1), (seq(ncol(M.fit))-1)/(ncol(M.fit)-1), z=M.fit, axes=FALSE, xlab="", ylab="")
-axis(1, at=(seq(nrow(M.fit))-1)/(nrow(M.fit)-1), labels=rownames(M.fit), cex.lab=0.5, las=2)
-axis(2, at=(seq(ncol(M.fit))-1)/(ncol(M.fit)-1), labels=colnames(M.fit), cex.lab=0.5, las=2)
-dev.off()
 
 rownames(M.exp) = row.names = rownames(M.obs)
 colnames(M.exp) = col.names = colnames(M.obs)
@@ -61,13 +50,18 @@ for (i in 1:nrow(M.obs)) {
     if (is.na(M.obs[i,j])) {
       next
     }
+    if (M.ind[i,j] > 0) {
+      points((i-1)/(nrow(M.obs)-1), (j-1)/(ncol(M.obs)-1), pch=8, cex=0.5, col="cyan2")  #blue4")
+    }
     L.i = append(L.i, row.names[i])
     L.j = append(L.j, col.names[j])
     L.obs = append(L.obs, M.obs[i,j])
     L.exp = append(L.exp, M.exp[i,j])
-    L.fit = append(L.fit, M.fit[i,j])
+    L.fit = append(L.fit, M.ind[i,j])
   }
 }
+rect(par("usr")[1], par("usr")[3], par("usr")[2], par("usr")[4], col=NULL, border="black", lwd=1.5)
+invisible(dev.off())
 
 write.table(
   data.frame(
