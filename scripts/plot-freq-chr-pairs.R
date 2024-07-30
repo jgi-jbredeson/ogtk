@@ -42,6 +42,8 @@ colnames(M.exp) = col.names = colnames(M.obs)
 
 L.i = c()
 L.j = c()
+L.id1 = c()
+L.id2 = c()
 L.obs = c()
 L.exp = c()
 L.fit = c()
@@ -50,28 +52,42 @@ for (i in 1:nrow(M.obs)) {
     if (is.na(M.obs[i,j])) {
       next
     }
-    if (M.ind[i,j] > 0) {
-      points((i-1)/(nrow(M.obs)-1), (j-1)/(ncol(M.obs)-1), pch=8, cex=0.5, col="cyan2")  #blue4")
-    }
-    L.i = append(L.i, row.names[i])
-    L.j = append(L.j, col.names[j])
+    # if (M.ind[i,j] > 0) {
+    #   points((i-1)/(nrow(M.obs)-1), (j-1)/(ncol(M.obs)-1), pch=8, cex=0.5, col="cyan2")  #blue4")
+    # }
+    L.i   = append(L.i, i)
+    L.j   = append(L.j, j)
+    L.id1 = append(L.id1, row.names[i])
+    L.id2 = append(L.id2, col.names[j])
     L.obs = append(L.obs, M.obs[i,j])
     L.exp = append(L.exp, M.exp[i,j])
     L.fit = append(L.fit, M.ind[i,j])
   }
 }
+
+L = data.frame(
+  i=L.i,
+  j=L.j,
+  INDVi=L.id1,
+  INDVj=L.id2,
+  N_OBS=L.obs,
+  N_EXP=L.exp,
+  PASS=L.fit,
+  PROB=ppois(L.obs, sapply(L.exp, function(v){max(1,v)}), lower.tail=FALSE),
+  stringsAsFactors=FALSE
+)
+
+L$PROB = p.adjust(L$PROB, method="fdr")
+
+passing = L[L$PROB <= 0.05,]
+
+points((passing$i-1)/(nrow(M.obs)-1), (passing$j-1)/(ncol(M.obs)-1), pch=8, cex=0.5, col="#EEAD0E")
+
 rect(par("usr")[1], par("usr")[3], par("usr")[2], par("usr")[4], col=NULL, border="black", lwd=1.5)
 invisible(dev.off())
 
-write.table(
-  data.frame(
-    INDV1=L.i,
-    INDV2=L.j,
-    N_OBS=L.obs,
-    N_EXP=L.exp,
-    PASS=L.fit,
-    stringsAsFactors=FALSE
-  ),
+
+write.table(L,
   file=sprintf("%s.tsv", args[[2]]),
   row.names=FALSE,
   col.names=TRUE,
