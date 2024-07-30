@@ -1,8 +1,8 @@
 #!/usr/bin/env Rscript
 
-# require(viridis)
-
 args = commandArgs(TRUE)
+
+#TODO: try permutation analysis to test significance: https://mgimond.github.io/Spatial/hypothesis-testing.html
 
 M.obs = as.matrix(read.table(args[[1]], stringsAsFactors=FALSE, row.names=1, header=TRUE))
 
@@ -38,7 +38,6 @@ axis(2, at=(seq(ncol(M.obs))-1)/(ncol(M.obs)-1), labels=colnames(M.obs), cex.lab
 rownames(M.exp) = row.names = rownames(M.obs)
 colnames(M.exp) = col.names = colnames(M.obs)
 
-# write.table(M.exp, file=sprintf("%s.exp.matrix", args[[2]]), row.names=TRUE, col.names=TRUE, sep="\t", quote=FALSE)
 
 L.i = c()
 L.j = c()

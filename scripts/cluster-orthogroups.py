@@ -375,7 +375,8 @@ def main(argv):
                     pattern_incl_unanchored[j],
                     config.species[ortho.species[j]],
                     is_placed,
-                    ignore_unplaced
+                    ignore_unplaced,
+                    aggregate_unplaced=True
                 )
             ))
         pattern = tuple(pattern_excl_unanchored)
