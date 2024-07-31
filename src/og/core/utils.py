@@ -2,7 +2,7 @@
 def count_items(items):
     count = {}
     for item in items:
-        if item in counts:
+        if item in count:
             count[item] += 1
         else:
             count[item] = 1
