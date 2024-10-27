@@ -101,32 +101,131 @@ _SEQUENCE_CODE_MAP = {
         'BflSca168':'(G)',
         'BflSca1511':'(K)',
     },
+    'Bla': {
+        'Bla1':'G',  # and K
+        'Bla2':'C1', # and J2
+        'Bla3':'O1', # and I
+        'Bla4':'A2', # and A1
+        'Bla5':'E',
+        'Bla6':'F',
+        'Bla7':'D',
+        'Bla8':'H',
+        'Bla9':'M',
+        'Bla10':'P',
+        'Bla11':'L',
+        'Bla12':'B2',
+        'Bla13':'B1',
+        'Bla14':'Q',
+        'Bla15':'B3',
+        'Bla16':'O2',
+        'Bla17':'N',
+        'Bla18':'J1',
+        'Bla19':'C2',
+    },
+    'Llo': {
+        'Llo3':'A1',
+        'Llo18':'A2',
+        'Llo16':'B1',
+        'Llo13':'B2',
+        'Llo15':'B3',
+        'Llo2':'C1*G',
+        'Llo14':'C2',
+        'Llo11':'D',
+        'Llo7':'E',
+        'Llo9':'F',
+        # '':'G',  # Llo2
+        'Llo1':'H*Q',
+        'Llo6':'I',
+        'Llo19':'J1',
+        'Llo4':'J2*L',
+        'Llo5':'K*O2',
+        # '':'L',  # Llo4
+        'Llo17':'M',
+        'Llo10':'N',
+        'Llo8':'O1*R',
+        # '':'O2',  # Llo5
+        'Llo12':'P',
+        # '':'Q',  # Llo1
+        # '':'R'  # Llo8
+    },
     'Lva': {
-        'Lva07':'A1',
-        'Lva08':'A2',
+        'Lva7':'A1',
+        'Lva8':'A2',
         'Lva13':'B1',
-        'Lva03':'B2xExC2',
-        'Lva05':'C1',
-        'Lva02':'D*G',
-        'Lva01':'F*(B3xJ1)',
+        'Lva3':'B2xExC2',
+        'Lva5':'C1',
+        'Lva2':'D*G',
+        'Lva1':'F*(B3xJ1)',
         'Lva10':'H',
         'Lva12':'I',
         'Lva17':'J2',
-        'Lva04':'K',
+        'Lva4':'K',
         'Lva11':'L',
         'Lva15':'M',
         'Lva16':'N',
-        'Lva09':'O1',
+        'Lva9':'O1',
         'Lva19':'O2',
         'Lva14':'P',
         'Lva18':'Q',
-        'Lva06':'R',
+        'Lva6':'R',
+    },
+    'Ofu': {
+        'Ofu8':'A1',
+        'Ofu10':'A2*C1',
+        'Ofu7':'B1*B3*C2',
+        'Ofu1':'B2*J1*J2*L*P',
+        # '':'B3',  # Ofu7
+        # '':'C1',
+        # '':'C2',
+        'Ofu3':'D',
+        'Ofu5':'E*I',
+        'Ofu2':'F',
+        'Ofu12':'G',
+        'Ofu9':'H*Q',
+        # '':'I',
+        # '':'J1',
+        # '':'J2',
+        'Ofu11':'K*O2',
+        # '':'L',
+        'Ofu6':'M*O1*R',
+        'Ofu4':'N',
+        # '':'O1',
+        # '':'O2',
+        # '':'P',
+        # '':'Q',
+        # '':'R',
+    },
+    'Pma': {
+        'Pma3':'A1',
+        'Pma13':'A2',
+        'Pma15':'B1',
+        'Pma2':'B2*M',
+        'Pma19':'B3',
+        'Pma9':'C1',
+        'Pma17':'C2',
+        'Pma11':'D',
+        'Pma7':'E',
+        'Pma6':'F',
+        'Pma8':'G',
+        'Pma1':'H*Q',
+        'Pma12':'I',
+        'Pma18':'J1',
+        'Pma4':'J2*L',
+        'Pma5':'K*O2',
+        # 'Pma4':'L',
+        # 'Pma2':'M',
+        'Pma14':'N',
+        'Pma10':'O1*R',
+        # 'Pma5':'O2',
+        'Pma16':'P',
+        # 'Pma1':'Q',
+        # 'Pma10':'R',
     },
     'Sca': {
         'Sca01':'A1',
         'Sca14':'A2',
         'Sca05':'B1xR',
-        'Sca11':'(B2xC2)1',
+        'Sca11':'(B2xC2)1',  # and 'D'
         'Sca23':'(B2xC2)2',
         'Sca21':'B3',
         'Sca10':'C1',
@@ -165,44 +264,56 @@ def parseLGs(LGs, specific=False):
 
 
 
-def inferLG(ortho_group, species_index, specific=False):
-    jv_code  = parseLGs(ortho_group[species_index['JV_LG']], specific)
-    bfl_code = parseLGs(ortho_group[species_index['Bfl_LG']], specific)
+def inferLGlogically(ortho_group, species_index, specific=False):
+    bla_code = parseLGs(ortho_group[species_index['Bla_LG']], specific)
     lva_code = parseLGs(ortho_group[species_index['Lva_LG']], specific)
     sca_code = parseLGs(ortho_group[species_index['Sca_LG']], specific)
 
-    jv_intersects_bfl = jv_code & bfl_code
-    jv_intersects_lva = jv_code & lva_code
-    jv_intersects_sca = jv_code & sca_code
+    llo_code = parseLGs(ortho_group[species_index['Llo_LG']], specific)
+    pma_code = parseLGs(ortho_group[species_index['Pma_LG']], specific)
+    ofu_code = parseLGs(ortho_group[species_index['Ofu_LG']], specific)
+
+    bla_intersects_lva = bla_code & lva_code
+    bla_intersects_sca = bla_code & sca_code
+    bla_intersects_llo = bla_code & llo_code
+    bla_intersects_pma = bla_code & pma_code
+    bla_intersects_ofu = bla_code & ofu_code
+
+    lva_intersects_llo = lva_code & llo_code
+    lva_intersects_pma = lva_code & pma_code
+    lva_intersects_ofu = lva_code & ofu_code
+
+    sca_intersects_llo = sca_code & llo_code
+    sca_intersects_pma = sca_code & pma_code
+    sca_intersects_ofu = sca_code & ofu_code
+
+
+
     
-    bfl_intersects_lva = bfl_code & lva_code
-    bfl_intersects_sca = bfl_code & sca_code
-    lva_intersects_sca = lva_code & sca_code
-    
-    # 1. If the provisional JV letter(s) match the corresponding Bfl letters,
+    # 1. If the provisional JV letter(s) match the corresponding Bla letters,
     #    then the ancestry of that gene family is most parsimoniously that
     #     letter. 
     
-    # 2.  If the provisional JV letter(s) match Bfl, but do not match either
+    # 2.  If the provisional JV letter(s) match Bla, but do not match either
     #     of Sca or Lva, then that is a translocation either on the base of
     #     jawed vertebrates or in the Sca/Lva lineages.
     
-    # 3. If the provisional JV letter(s) dont match the corresponding Bfl
+    # 3. If the provisional JV letter(s) dont match the corresponding Bla
     #    letter(s), but they do match one or both of Sca or Lva (when
     #    available), then the ancestry of that gene family is most
     #    parsimoniously of that letter, with translocation (or misassembly)
-    #    in Bfl.
+    #    in Bla.
     
-    # 4. If the Bfl letter and one of Sca/Lva match, but are different from
+    # 4. If the Bla letter and one of Sca/Lva match, but are different from
     #    the provisional JV letter, then that means that the ancestry is the
-    #    Bfl/Sca/Lva letter, and a translocation occurred at the base of the
+    #    Bla/Sca/Lva letter, and a translocation occurred at the base of the
     #    jawed vertebrates.        
     
-    # 5. if there is no Bfl gene, but the provisional JVI letter(s) matches
+    # 5. if there is no Bla gene, but the provisional JVI letter(s) matches
     #    Sca or Lva, then the ancestry of that gene family inherited from
     #    Sca/Lva.
     
-    # 6. if there is no Bfl gene, and the provisional JVI letter(s) disagrees
+    # 6. if there is no Bla gene, and the provisional JVI letter(s) disagrees
     #    with both Sca or Lva, then the ancestry is ambiguous, and that gene
     #    could have been translocated 
     
@@ -211,30 +322,30 @@ def inferLG(ortho_group, species_index, specific=False):
 
     comments = []    
     consensus = set()
-    if not consensus and jv_intersects_bfl & lva_intersects_sca:
-        consensus = jv_intersects_bfl & lva_intersects_sca
-    if not consensus and jv_intersects_bfl & lva_code:
-        consensus = jv_intersects_bfl & lva_code
-        # comments.append('HERE')
-    if not consensus and jv_intersects_bfl & sca_code:
-        consensus = jv_intersects_bfl & sca_code
-        # comments.append('HERE')
-    if not consensus and lva_intersects_sca & bfl_code:
-        consensus = lva_intersects_sca & bfl_code
-    if not consensus and lva_intersects_sca & jv_code:
-        consensus = lva_intersects_sca & jv_code
-    # if not consensus and bfl_intersects_lva and bfl_intersects_sca:
-    #    consensus = bfl_intersects_lva & bfl_intersects_sca
-    if not consensus and bfl_intersects_lva:
-        consensus = bfl_intersects_lva
-    if not consensus and bfl_intersects_sca:
-        consensus = bfl_intersects_sca
-    # if not consensus and jv_intersects_lva and jv_intersects_sca:
-    #     consensus = jv_intersects_lva & jv_intersects_sca
-    if not consensus and jv_intersects_lva:
-        consensus = jv_intersects_lva
-    if not consensus and jv_intersects_sca:
-        consensus = jv_intersects_sca
+    if not consensus and bla_intersects_lva:
+        consensus = bla_intersects_lva
+    if not consensus and bla_intersects_sca:
+        consensus = bla_intersects_sca
+    if not consensus and bla_intersects_llo:
+        consensus = bla_intersects_llo
+    if not consensus and bla_intersects_pma:
+        consensus = bla_intersects_pma
+    if not consensus and bla_intersects_ofu:
+        consensus = bla_intersects_ofu
+        
+    if not consensus and lva_intersects_llo:
+        consensus = lva_intersects_llo
+    if not consensus and lva_intersects_pma:
+        consensus = lva_intersects_pma
+    if not consensus and lva_intersects_ofu:
+        consensus = lva_intersects_ofu
+
+    if not consensus and sca_intersects_llo:
+        consensus = sca_intersects_llo
+    if not consensus and sca_intersects_pma:
+        consensus = sca_intersects_pma
+    if not consensus and sca_intersects_ofu:
+        consensus = sca_intersects_ofu
 
     if num(consensus) == 0:
         comments.append('no-consensus')
@@ -243,17 +354,11 @@ def inferLG(ortho_group, species_index, specific=False):
             comments.append('multi-consensus')
         num_intersects = 0
         num_present = 0
-        if jv_code:
-            if (jv_code & consensus) == consensus:
+        if bla_code:
+            if (bla_code & consensus) == consensus:
                 num_intersects += 1
             else:
-                comments.append('jv-translocation')
-            num_present += 1            
-        if bfl_code:
-            if (bfl_code & consensus) == consensus:
-                num_intersects += 1
-            else:
-                comments.append('Bfl-translocation')
+                comments.append('Bla-translocation')
             num_present += 1            
         if lva_code:
             if (lva_code & consensus) == consensus:
@@ -267,7 +372,25 @@ def inferLG(ortho_group, species_index, specific=False):
             else:
                 comments.append('Sca-translocation')
             num_present += 1
-        
+        if llo_code:
+            if (llo_code & consensus) == consensus:
+                num_intersects += 1
+            else:
+                comments.append('Llo-translocation')
+            num_present += 1
+        if pma_code:
+            if (pma_code & consensus) == consensus:
+                num_intersects += 1
+            else:
+                comments.append('Pma-translocation')
+            num_present += 1
+        if ofu_code:
+            if (ofu_code & consensus) == consensus:
+                num_intersects += 1
+            else:
+                comments.append('Ofu-translocation')
+            num_present += 1
+            
         if num_intersects == num_present:
             comments = ['complete-consensus'] + comments
         else:
@@ -341,7 +464,7 @@ def RULE_BASED(argv):
     ortho = OrthoFinderOrthogroups(argv[0])
 
     species_index = dict(zip(ortho.species, range(num(ortho.species))))
-    new_species = ('Bfl','Lva','Sca')
+    new_species = list(species_index)  # ('Bla','Lva','Sca')
     append_species_LG_to_header(
         new_species,
         ortho,
@@ -358,9 +481,9 @@ def RULE_BASED(argv):
             species_index
         )
         
-        codes, comments = inferLG(ortho.groups[g], species_index, specific=True)
+        codes, comments = inferLGlogically(ortho.groups[g], species_index, specific=True)
         if codes is _ambiguous:
-           codes, comments = inferLG(ortho.groups[g], species_index, specific=False)
+           codes, comments = inferLGlogically(ortho.groups[g], species_index, specific=False)
            
         codes = sorted(collapseLGs(codes))
 
@@ -426,7 +549,7 @@ def PHYLOGENY_BASED(argv):
 
     species_index = dict(zip(ortho.species, range(num(ortho.species))))
 
-    new_species = ('Bfl','Lva','Sca')
+    new_species = ortho.species.copy()
     
     outgroups = set()
     for anc_index, dsc_index in tree.get_edges(indices=True, reverse=True):
@@ -459,6 +582,8 @@ def PHYLOGENY_BASED(argv):
         )
 
         consensus, comments = inferLGphylogenetically(ortho.groups[g], species_index, tree, specific=True)
+        if consensus is _ambiguous:
+            consensus, comments = inferLGphylogenetically(ortho.groups[g], species_index, tree, specific=False)
             
         ortho.groups[g].append(('|'.join(sorted(consensus)),))
         ortho.groups[g].append((';'.join(comments),))

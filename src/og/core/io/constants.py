@@ -1,4 +1,8 @@
 
+import sys
+
+_PYTHON_VERSION = sys.version_info[:2]
+
 STDIO = '-'
 
 COMPRESSION_SUFFIX = {

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding: utf-8
 
 import os
 import sys
@@ -25,30 +24,31 @@ _bed_field_types = {'chr':str, 'beg':int, 'end':int, 'name':str, 'score':float, 
 _map_field_types = {'name':str, 'label':str}
 _valid_output_types = ('pdf','png','ps','eps','svg')
 _valid_coordinate_systems = ('genomic','ordinal')
+
 _palette_priority = ['tab10','Set3','Dark2','Pastel1','tab20b','tab20c','Accent','Set2','Set1','Pastel2','tab20','Paired']
 _default_colors = []
 for palette in _palette_priority:
     _default_colors.extend(reversed(cmaps[palette].colors))
 
 
-def get_num_bins(num_data, bin_width=1, bin_step=1):
-    return max(1, math.ceil(float(num_data) / bin_step))
+def get_num_bins(num_data, bin_width=1, bin_shift=1):
+    return max(1, math.ceil(float(num_data) / bin_shift))
 
 
-def get_frequencies(data, labels, bin_width=1, bin_step=1):
+def get_frequencies(data, labels, bin_width=1, bin_shift=1):
     """
     The data object is a pandas.Series and the labels object is a dictionary
     containing labels as keys and indices as values
     """
-    num_bins = get_num_bins(num(data), bin_width, bin_step)
+    num_bins = get_num_bins(num(data), bin_width, bin_shift)
     label_freq = numpy.zeros((num_bins, num(labels)), dtype=numpy.float64)
     label_max = numpy.zeros(num_bins)
     idx_begs = []
     idx_ends = []
     for i in range(num_bins):
-        bin_beg = bin_step * i
-        bin_end = bin_step * i + bin_width
-        
+        bin_beg = bin_shift * i
+        bin_end = bin_shift * i + bin_width
+
         bin_loci = data.iloc[bin_beg:bin_end]
             
         for label in labels:
@@ -62,10 +62,9 @@ def get_frequencies(data, labels, bin_width=1, bin_step=1):
     return label_freq, numpy.array(idx_begs), numpy.array(idx_ends)
 
 
-
-def get_blocks(data, labels, bin_width=1, bin_step=1):
-    num_bins = get_num_bins(num(data), bin_width, bin_step)
-    bin_freq, _, _ = get_frequencies(data, labels, bin_width, bin_step)
+def get_blocks(data, labels, bin_width=1, bin_shift=1):
+    num_bins = get_num_bins(num(data), bin_width, bin_shift)
+    bin_freq, _, _ = get_frequencies(data, labels, bin_width, bin_shift)
     bin_max = bin_freq.argmax(1)
 
     blocks = []
@@ -73,7 +72,7 @@ def get_blocks(data, labels, bin_width=1, bin_step=1):
     block_end = 0
     min_delta = 1.0
     for j in range(1, num_bins):
-        i = max(0, j - bin_width // bin_step)
+        i = max(0, j - bin_width // bin_shift)
         if bin_max[i] != bin_max[j]:
             delta = abs(bin_freq[i, bin_max[i]] - bin_freq[j, bin_max[j]])
             if delta < min_delta:
@@ -88,7 +87,6 @@ def get_blocks(data, labels, bin_width=1, bin_step=1):
     blocks.append((data.index[block_beg], data.index[-1] + 1))
         
     return blocks
-
 
 
 def read_colors(colorfile_name):
@@ -175,22 +173,28 @@ def get_chrom_sizes(locus_bed, system='genomic'):
     for chr_name in locus_bed['chr'].unique():
         chr_loci = locus_bed[locus_bed['chr'] == chr_name]
         if system == 'ordinal':
-            chr_size[chr_name] = num(chr_loci)
+            # chr_size[chr_name] = num(chr_loci)
+            chr_size[chr_name] = chr_loci.index.max() - chr_loci.index.min() + 1
         else:
             chr_size[chr_name] = chr_loci['end'].max()
 
     return chr_size
 
 
-
-def get_chrom_offsets(chr_sizes):
+def get_chrom_offsets(locus_bed, system='genomic'):
     sum_size = 0
     chr_offset = {}
-    for chr_name in chr_sizes:
-        chr_offset[chr_name] = sum_size
-        sum_size += chr_sizes[chr_name]
+    for chr_name in locus_bed['chr'].unique():
+        chr_loci = locus_bed[locus_bed['chr'] == chr_name]
+        if system == 'ordinal':
+            chr_offset[chr_name] = chr_loci.index.min()
+        else:
+            chr_offset[chr_name] = sum_size
+            sum_size += chr_loci['end'].max()
+    # for chr_name in chr_sizes:
+    #     chr_offset[chr_name] = sum_size
+    #     sum_size += chr_sizes[chr_name]
     return chr_offset
-
 
     
 def usage(message=None, exitcode=1, stream=sys.stderr):
@@ -268,14 +272,21 @@ def main(argv):
     locusbed_name = arguments[0]
     locusmap_name = arguments[1]
 
-    locus_bed = pandas.read_table(locusbed_name, names=['chr','beg','end','name','score','strand'], header=None, sep="\t")
+    locus_bed = pandas.read_table(locusbed_name, header=None, sep="\t")
+    locus_bed = locus_bed[list(range(6))]
+    locus_bed.columns = ['chr','beg','end','name','score','strand']
     locus_bed = locus_bed.astype(_bed_field_types)
-    locus_map = pandas.read_table(locusmap_name, names=['name','label'], header=None, sep="\t", dtype=str)
+    
+    locus_map = pandas.read_table(locusmap_name, header=None, sep="\t", dtype=str)
+    locus_map = locus_map[list(range(2))]
+    locus_map.columns = ['name', 'label']
     locus_map = locus_map.astype(_map_field_types)
 
     # Option `how='inner'` causes output df to be re-indexed, so cannot use it.
     labeled_loci = pandas.merge(locus_bed, locus_map, on='name', how='outer').dropna()
+    labeled_loci = labeled_loci.sort_values(by=['chr', 'beg', 'end'], ignore_index=True)
 
+    
     # colorsfile_name = None
     if colorsfile_name is None:
         label_colors = {}
@@ -287,37 +298,55 @@ def main(argv):
         label_colors = read_colors(colorsfile_name)
         label_index = dict(zip(label_colors, range(len(label_colors))))
 
+        
     chr_size = get_chrom_sizes(locus_bed, system=coordinate_system)
-    chr_offset = get_chrom_offsets(chr_size)
+    chr_offset = get_chrom_offsets(locus_bed, system=coordinate_system)
 
 
     max_size = max(chr_size.values())
-    num_chr = num(labeled_loci['chr'].unique())
+    num_chr = num(locus_bed['chr'].unique())
 
     fig, ax = plotter.subplots(num_chr, figsize=(8, num_chr))
     fig.tight_layout()
 
-    for chr_index, chr_name in enumerate(labeled_loci['chr'].unique()):
+    for chr_index, chr_name in enumerate(locus_bed['chr'].unique()):
         chr_loci = labeled_loci[labeled_loci['chr'] == chr_name]
 
+        if num(chr_loci) < 1:
+            ax[chr_index].hlines(0, 0, chr_size[chr_name], linewidth=3.0, color='black')
+            ax[chr_index].set_xbound(0, max_size)
+            ax[chr_index].set_ybound(0, 1)
+            ax[chr_index].spines['bottom'].set_visible(False)
+            ax[chr_index].spines['right'].set_visible(False)
+            ax[chr_index].spines['top'].set_visible(False)
+            ax[chr_index].get_yaxis().set_ticks([])
+            ax[chr_index].set_ylabel(chr_name)
+            continue
+        
         if adaptive_binning:
-            blocks = get_blocks(chr_loci['label'], label_index, bin_width, bin_step=1)
+            blocks = get_blocks(chr_loci['label'], label_index, bin_width, bin_shift=1)
         else:
             blocks = [(chr_loci.index[0], chr_loci.index[-1] + 1)]
-
+    
         bin_freq = None
         bin_begs = []
         bin_ends = []
         for block_beg, block_end in blocks:
             block_loci = chr_loci.loc[block_beg:block_end]
 
-            _bin_freq, _bin_begs, _bin_ends = get_frequencies(block_loci['label'], label_index, bin_width, bin_width)
+            _bin_freq, _bin_begs, _bin_ends = \
+                get_frequencies(
+                    block_loci['label'],
+                    label_index,
+                    bin_width=bin_width,
+                    bin_shift=bin_width
+                )
 
             if bin_freq is None:
                 bin_freq = _bin_freq
             else:
                 bin_freq = numpy.vstack((bin_freq, _bin_freq))
-
+                
             bin_begs.extend(_bin_begs)
             bin_ends.extend(_bin_ends)
 
@@ -349,9 +378,11 @@ def main(argv):
 
         ax[chr_index].hlines(0, 0, chr_size[chr_name], linewidth=3.0, color='black')
         ax[chr_index].set_xbound(0, max_size)
+        ax[chr_index].set_ybound(0, 1)
         ax[chr_index].spines['bottom'].set_visible(False)
         ax[chr_index].spines['right'].set_visible(False)
         ax[chr_index].spines['top'].set_visible(False)
+        ax[chr_index].get_yaxis().set_ticks([])
         ax[chr_index].set_ylabel(chr_name)
     
     plotter.savefig(output_file, format=output_type)
@@ -412,28 +443,7 @@ if __name__ == '__main__':
 # ax.scatter(range(num(RGB)), range(num(RGB)), color=RGB)
 # plotter.show()
 
-
-# # In[11]:
-
-
-# HSV[24]
-
-
-# # In[125]:
-
-
 # for h, s, v in HSV:
 #     print(h, s, v)
 
-
-# # In[44]:
-
-
 # c = cmaps['Dark2']
-
-
-# # In[45]:
-
-
-# c.colors
-

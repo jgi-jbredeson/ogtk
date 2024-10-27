@@ -9,7 +9,7 @@ import locale
 __all__ = ('open','import_compression_module','STDIO')
 
 
-from og.constants import _PYTHON_VERSION
+from .constants import _PYTHON_VERSION
 from .constants import STDIO, COMPRESSION_NAME_MAP
 from .filenames import infer_compression_format
 

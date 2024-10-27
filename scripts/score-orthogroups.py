@@ -16,6 +16,7 @@ import io
 import sys
 import getopt
 
+from og.core.io import is_stream, open
 from og.core.members import _LENIENT, _STRICT
 from og.core.parsers.config import SpeciesConfig
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
@@ -25,6 +26,7 @@ from og.constants import (
     _COMMA,
     _COMMENT,
     _EMPTY,
+    _EOL,
     _SPACE,
     _TAB,
 )
@@ -32,6 +34,7 @@ from og.constants import (
 _DEBUG = False
 
 num = len
+
 
 class ProbabilitiesTable(object):
     def __init__(self):
@@ -41,7 +44,39 @@ class ProbabilitiesTable(object):
         self.rowindex = {}
         self.matrix = []
 
+    def format_header(self):
+        return "Cluster\t%s" % _TAB.join(self.colnames)
+
+    def format_record(self, index=None):
+        if index is None:
+            raise ValueError("no index given")
+        return "%s\t%s" % (
+            self.rownames[index],
+            _TAB.join(map("{:.3e}".format, self.matrix[index]))
+        )
         
+    def to_table(self, infile=sys.stdout, **kwargs):
+        if is_stream(infile):
+            stream = infile
+            close = False
+        else:
+            if 'mode' in kwargs:
+                if 'r' in kwargs['mode']:
+                    raise ValueError("%s.to_table() is write-only" % (
+                        self.__class__.__name__
+                    ))
+            else:
+                kwargs['mode'] = 'w'
+                stream = open(infile, **kwargs)
+                close = True
+
+        stream.write(self.format_header() + _EOL)
+        for i in range(num(self.rownames)):
+            stream.write(self.format_record(index=i) + _EOL)
+        if close:
+            stream.close()
+
+            
 class ClusteredOrthogroups(OrthoFinderOrthogroups):
     def __init__(self, infile=None, **kwargs):
         OrthoFinderOrthogroups.__init__(self)
@@ -341,6 +376,9 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     input orthogroups table contains only unplaced (ie, non-chomosomal)\n")
     stream.write("     sequences, that cell contains members.\n")
     stream.write("\n")
+    stream.write("  -P,--output-posterior-prob-file <file>\n")
+    stream.write("     Write the Bayesian posterior probabilities table to file.\n")
+    stream.write("\n")
     stream.write("  -u,--ignore-unlocalized\n")
     stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
     stream.write("     designated sequence names, not to their placed chromosome names.\n")
@@ -362,13 +400,14 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 
     
 def main(argv):
-    short_options = 'hEiIu'
+    short_options = 'hEiIuP:'
     long_options = (
         'help',
         'check-errors',
         'ignore-unlocalized',
         'ignore-unplaced-strictly',
         'ignore-unplaced-leniently',
+        'output-posterior-prob-file='
     )
     try:
         options, arguments = getopt.getopt(argv, short_options, long_options)
@@ -378,12 +417,14 @@ def main(argv):
     check_errors = False
     is_placed = _placed
     ignore_unplaced = 0  # _STRICT
+    output_posterior_file = None
     for flag, value in options:
         if   flag in ('-h','--help'): usage(exitcode=0)
         elif flag in ('-E','--check-errors'): check_errors = True
         elif flag in ('-u','--ignore-unlocalized'): is_placed = _localized
         elif flag in ('-i','--ignore-unplaced-leniently'): ignore_unplaced = _LENIENT
         elif flag in ('-I','--ignore-unplaced-strictly'): ignore_unplaced = _STRICT
+        elif flag in ('-P','--output-posterior-prob-file'): output_posterior_file = value
 
     if num(arguments) != 2 and \
        num(arguments) != 3:
@@ -425,6 +466,8 @@ def main(argv):
 
         orthoU = errors
 
+    if output_posterior_file is not None:
+        pprobs.to_table(output_posterior_file)
     orthoU.to_table()
 
     

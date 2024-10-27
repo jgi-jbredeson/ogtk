@@ -21,11 +21,10 @@ Loc:
   references : ./Loc.assembly_report.txt
   unplaced_id : LocSca
 
-Lva:
-  loci : ./Lva.locus.bed
-  references : ./Lva.assembly_report.txt
-  unplaced_id : LvaSca
-  outgroup : True
+Ler:
+  loci : ./Ler.locus.bed
+  references : ./Ler.assembly_report.txt
+  unplaced_id : LerSca
 
 Xtr:
   loci : ./Xtr.locus.bed

@@ -27,7 +27,7 @@ from og.constants import _TAB, _SPACE, _EMPTY, _EOL
 
 num = len
 _MEMBERSHIP = 0x1
-
+_MULTIPLES = 0x2
 
 def usage(message=None, exitcode=1, stream=sys.stderr):
     message = _EMPTY if message is None else 'ERROR: %s\n\n' % message
@@ -40,7 +40,8 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     stream.write("Options:\n")
     stream.write("  -g,--group-by <enum>\n")
-    stream.write("     Group output by 1 (membership) [0]\n")
+    stream.write("     Group output by membership (=1), number of Multiples (=2) [0]\n")
+    stream.wrote("     (See the `--max-count` option below)\n")
     stream.write("\n")
     stream.write("  -I,--ignore-unplaced-strictly\n")
     stream.write("     Strictly ignore unplaced sequences in filtering. If a cell in the\n")
@@ -112,7 +113,7 @@ def main(argv):
         if flag in ('-h','--help'):
             usage(exitcode=0)
         elif flag in ('-g','--group-by'):
-            group_by = int(value)
+            group_by |= int(value)
         elif flag in ('-o','--output-file'):
             output_file = value
         elif flag in ('-M','--max-count'):
@@ -200,13 +201,23 @@ def main(argv):
     if group_by & _MEMBERSHIP:
         group_patterns = dict()
         group_counts = dict()
-        for pattern in ortho_counts:
-            _pattern = tuple(sorted(pattern))
-            if _pattern not in group_patterns:
-                group_patterns[_pattern] = dict()
-                group_counts[_pattern] = 0
-            group_patterns[_pattern][pattern] = ortho_counts[pattern]
-            group_counts[_pattern] += ortho_counts[pattern]
+        if group_by & _MULTIPLES:
+            for pattern in ortho_counts:
+                _pattern = tuple(sorted(pattern))
+                _count = _pattern.count('M')
+                if _count not in group_patterns:
+                    group_patterns[_count] = dict()
+                    group_counts[_count] = 0
+                group_patterns[_count][pattern] = ortho_counts[pattern]
+                group_counts[_count] += ortho_counts[pattern]
+        else:
+            for pattern in ortho_counts:
+                _pattern = tuple(sorted(pattern))
+                if _pattern not in group_patterns:
+                    group_patterns[_pattern] = dict()
+                    group_counts[_pattern] = 0
+                group_patterns[_pattern][pattern] = ortho_counts[pattern]
+                group_counts[_pattern] += ortho_counts[pattern]
 
         for _pattern in sorted(group_patterns, key=group_counts.get, reverse=True):
             output.write("##total=%d\n" % group_counts[_pattern])

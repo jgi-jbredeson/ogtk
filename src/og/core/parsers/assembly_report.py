@@ -8,7 +8,7 @@ from og.core.io import open, is_stream
 
 
 if _PYTHON_VERSION < (3,7):
-    import collections.OrderedDict as dict
+    from collections import OrderedDict as dict
     
 
 num = len
