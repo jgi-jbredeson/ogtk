@@ -20,19 +20,26 @@ __purpose__ = 'Plot label densities along the genome'
 
 num = len
 
-_bed_field_types = {'chr':str, 'beg':int, 'end':int, 'name':str, 'score':float, 'strand':str}
-_map_field_types = {'name':str, 'label':str}
+_bed_field_names = ['chr','beg','end','name','score','strand']
+_bed_field_types = [str, int, int, str, float, str]
+
+_map_field_names = ['name','label']
+_map_field_types = [str, str]
+
 _valid_output_types = ('pdf','png','ps','eps','svg')
 _valid_coordinate_systems = ('genomic','ordinal')
 
-_palette_priority = ['tab10','Set3','Dark2','Pastel1','tab20b','tab20c','Accent','Set2','Set1','Pastel2','tab20','Paired']
+_palette_priority = ['tab10','Set3','Dark2','Pastel1','tab20b','tab20c',
+                     'Accent','Set2','Set1','Pastel2','tab20','Paired']
 _default_colors = []
 for palette in _palette_priority:
     _default_colors.extend(reversed(cmaps[palette].colors))
 
 
+    
 def get_num_bins(num_data, bin_width=1, bin_shift=1):
     return max(1, math.ceil(float(num_data) / bin_shift))
+
 
 
 def get_frequencies(data, labels, bin_width=1, bin_shift=1):
@@ -62,6 +69,7 @@ def get_frequencies(data, labels, bin_width=1, bin_shift=1):
     return label_freq, numpy.array(idx_begs), numpy.array(idx_ends)
 
 
+
 def get_blocks(data, labels, bin_width=1, bin_shift=1):
     num_bins = get_num_bins(num(data), bin_width, bin_shift)
     bin_freq, _, _ = get_frequencies(data, labels, bin_width, bin_shift)
@@ -87,22 +95,6 @@ def get_blocks(data, labels, bin_width=1, bin_shift=1):
     blocks.append((data.index[block_beg], data.index[-1] + 1))
         
     return blocks
-
-
-def read_colors(colorfile_name):
-    colordict = {}
-    colorfile = open(colorfile_name, 'r')
-    for line in colorfile:
-        line = line.strip()
-        if line == '' or line.startswith('#'):
-            continue
-        fields = line.split('\t')
-    
-        colordict[fields[0]] = fields[1].strip(""""'""")
-
-    colorfile.close()
-    
-    return colordict
 
 
 
@@ -160,6 +152,7 @@ def plot_color_legend(lg_colors, file=None):
         plotter.show()
 
 
+
 def write_color_legend(lg_colors, file):
     legend_type = infer_output_type(file)
     file = file[:-len(legend_type)] + 'tsv'
@@ -168,17 +161,15 @@ def write_color_legend(lg_colors, file):
             colorsfile.write('%s\t"%s"\n' % (lg, to_hex(lg_colors[lg])))
         
 
+            
 def get_chrom_sizes(locus_bed, system='genomic'):
     chr_size = {}
     for chr_name in locus_bed['chr'].unique():
         chr_loci = locus_bed[locus_bed['chr'] == chr_name]
-        if system == 'ordinal':
-            # chr_size[chr_name] = num(chr_loci)
-            chr_size[chr_name] = chr_loci.index.max() - chr_loci.index.min() + 1
-        else:
-            chr_size[chr_name] = chr_loci['end'].max()
+        chr_size[chr_name] = chr_loci['end'].max()
 
     return chr_size
+
 
 
 def get_chrom_offsets(locus_bed, system='genomic'):
@@ -186,17 +177,70 @@ def get_chrom_offsets(locus_bed, system='genomic'):
     chr_offset = {}
     for chr_name in locus_bed['chr'].unique():
         chr_loci = locus_bed[locus_bed['chr'] == chr_name]
-        if system == 'ordinal':
-            chr_offset[chr_name] = chr_loci.index.min()
-        else:
-            chr_offset[chr_name] = sum_size
-            sum_size += chr_loci['end'].max()
-    # for chr_name in chr_sizes:
-    #     chr_offset[chr_name] = sum_size
-    #     sum_size += chr_sizes[chr_name]
+        chr_offset[chr_name] = sum_size
+        sum_size += chr_loci['end'].max()
     return chr_offset
 
+
+
+def read_colors(colorfile_name):
+    colordict = {}
+    colorfile = open(colorfile_name, 'r')
+    for line in colorfile:
+        line = line.strip()
+        if line == '' or line.startswith('#'):
+            continue
+        fields = line.split('\t')
     
+        colordict[fields[0]] = fields[1].strip(""""'""")
+
+    colorfile.close()
+    
+    return colordict
+
+
+
+def read_table(file_name, header=None, types=None):
+    input_table = pandas.read_table(file_name, header=None, sep="\t")
+
+    if header is None:
+        header = list(input_table.columns)
+    else:
+        input_table = input_table[list(range(num(header)))]
+        input_table.columns = header
+    
+    if types is not None:
+        assert num(types) == num(header), \
+            'Unequal number of column names and types'
+        
+        input_table = input_table.astype(dict(zip(header, types)))
+        
+    return input_table
+
+
+
+def index_bed(input_bed):
+    indexed_bed = []
+    for chr_name in input_bed['chr'].unique():
+        chr_loci = input_bed[input_bed['chr'] == chr_name].copy()
+        chr_loci.loc[:,'beg'] = list(range(0, num(chr_loci)))
+        chr_loci.loc[:,'end'] = list(range(1, num(chr_loci)+1))
+        indexed_bed.append(chr_loci)
+    return pandas.concat(indexed_bed, ignore_index=True)
+
+
+
+def sort_bed(input_bed, order):
+    sorted_bed = []
+    for chr_name in order:
+        sorted_bed.append(
+            input_bed[input_bed['chr'] == chr_name].copy()
+        )
+
+    return pandas.concat(sorted_bed, ignore_index=True)
+        
+
+
 def usage(message=None, exitcode=1, stream=sys.stderr):
     message = '' if message is None else 'ERROR: %s\n\n' % message
     stream.write("\n")
@@ -217,6 +261,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     stream.write("\n%s" % message)
     sys.exit(exitcode)
+
 
 
 def main(argv):
@@ -272,22 +317,18 @@ def main(argv):
     locusbed_name = arguments[0]
     locusmap_name = arguments[1]
 
-    locus_bed = pandas.read_table(locusbed_name, header=None, sep="\t")
-    locus_bed = locus_bed[list(range(6))]
-    locus_bed.columns = ['chr','beg','end','name','score','strand']
-    locus_bed = locus_bed.astype(_bed_field_types)
-    
-    locus_map = pandas.read_table(locusmap_name, header=None, sep="\t", dtype=str)
-    locus_map = locus_map[list(range(2))]
-    locus_map.columns = ['name', 'label']
-    locus_map = locus_map.astype(_map_field_types)
+    locus_bed = read_table(locusbed_name, header=_bed_field_names, types=_bed_field_types)
+    locus_map = read_table(locusmap_name, header=_map_field_names, types=_map_field_types)
 
-    # Option `how='inner'` causes output df to be re-indexed, so cannot use it.
-    labeled_loci = pandas.merge(locus_bed, locus_map, on='name', how='outer').dropna()
-    labeled_loci = labeled_loci.sort_values(by=['chr', 'beg', 'end'], ignore_index=True)
-
+    if coordinate_system == 'ordinal':
+        locus_bed = index_bed(locus_bed)
     
-    # colorsfile_name = None
+    chr_size = get_chrom_sizes(locus_bed)
+    chr_offset = get_chrom_offsets(locus_bed)
+    
+    labeled_loci = pandas.merge(locus_bed, locus_map, on='name', how='inner')
+    labeled_loci = sort_bed(labeled_loci, chr_offset)
+
     if colorsfile_name is None:
         label_colors = {}
         label_index = {}
@@ -297,10 +338,6 @@ def main(argv):
     else:
         label_colors = read_colors(colorsfile_name)
         label_index = dict(zip(label_colors, range(len(label_colors))))
-
-        
-    chr_size = get_chrom_sizes(locus_bed, system=coordinate_system)
-    chr_offset = get_chrom_offsets(locus_bed, system=coordinate_system)
 
 
     max_size = max(chr_size.values())
@@ -353,16 +390,12 @@ def main(argv):
         assert num(bin_freq) == num(bin_begs) == num(bin_ends), \
             'Mismatched number of frequencies and bin positions'
 
-        chr_freq = bin_freq.T
+        chr_freq = bin_freq.transpose()
         chr_begs = numpy.zeros(num(bin_begs), dtype=numpy.int64)
         chr_ends = numpy.zeros(num(bin_ends), dtype=numpy.int64)
         for i in range(num(bin_ends)):
-            if coordinate_system == 'ordinal':
-                chr_begs[i] = chr_ends[i-1]
-                chr_ends[i] = bin_ends[i] - chr_offset[chr_name]
-            else:
-                chr_begs[i] = chr_ends[i-1]
-                chr_ends[i] = chr_loci['end'][bin_ends[i]]
+            chr_begs[i] = chr_ends[i-1]
+            chr_ends[i] = chr_loci['end'][bin_ends[i]]
 
         bottom = numpy.zeros(num(chr_ends))
         for label in label_index:
@@ -396,54 +429,3 @@ def main(argv):
 if __name__ == '__main__':
     main(sys.argv[1:])
 
-
-    
-# from matplotlib.colors import hsv_to_rgb
-
-# fig, ax = plotter.subplots()
-# u = 12 # of hues
-# y = 1.0/2.0  # fractions of a color (light) 
-# z = 1.0/2.0  # fractions of a color (dark)
-
-# HSV = []
-
-# i = 0
-# j = u
-# s = 1
-# v = 0
-# S = 1.0
-# V = 1.0
-# while i < 60:
-#     H = (1.0 / u) * (i % u)
-#     if S < y:
-#         s = 0
-#         v = 1
-#     if V < z:
-#         v = 0
-        
-#     if s:
-#         S = 1.0 - y * (i // u)
-#     else:
-#         S = 1.0
-#     if v:
-#         V = 1.0 - z * (j // u)
-#         j += 1
-#     else:
-#         V = 1.0
-
-#     if (H, S, V) == (0.0, 0.0, 1.0):
-#         # white
-#          continue
-        
-#     HSV.append((H, S, V))
-#     i += 1
-
-# RGB = hsv_to_rgb(HSV)
-
-# ax.scatter(range(num(RGB)), range(num(RGB)), color=RGB)
-# plotter.show()
-
-# for h, s, v in HSV:
-#     print(h, s, v)
-
-# c = cmaps['Dark2']
