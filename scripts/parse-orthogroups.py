@@ -11,8 +11,8 @@ from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.constants import (
     _COMMA,
     _EMPTY,
-    _EOL,
     _SPACE,
+    _EOL,
     _TAB
 )
 
@@ -23,8 +23,11 @@ __version__ = '__PACKAGE_VERSION__'
 __contact__ = '__PACKAGE_CONTACT__'
 __purpose__ = 'Manipulate OrthoFinder orthogroups files'
 
+_LF = '\n'
+_CR = '\r'
 
 num = len
+
 
 def lineparser(line):
     return line.rstrip(_EOL).split(_TAB)[0]
@@ -81,6 +84,10 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("  -d,--prefix-delim <char>\n")
     stream.write("     When prefixing species names to locus IDs, seperate them using char [|]\n")
     stream.write("\n")
+    stream.write("  -D,--replace-delim <char>\n")
+    stream.write("     To make IDs safe, replace existing specified char in locus IDs prior to\n")
+    stream.write("     prefixing species ID [|]\n")
+    stream.write("\n")
     stream.write("  -o,--output-file <file>\n")
     stream.write("     Write output to file [stdout]\n")
     stream.write("\n")
@@ -95,6 +102,9 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     stream.write("  -h,--help\n")
     stream.write("     Print this usage message\n")
+    stream.write("\n")
+    stream.write("Notes:\n")
+    stream.write("  - ClusterVenn3 requires `.txt` file suffix\n")
     stream.write("\n\n%s" % message)
     #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
     #            0        10        20        30        40        50        60        70        80
@@ -105,6 +115,7 @@ def main(argv):
     err = sys.stderr
     output_file = sys.stdout
     species_delim = '|'
+    replace_delim = species_delim
     species_prefix = False
     oldspecies = None
     oldindices = None
@@ -118,12 +129,13 @@ def main(argv):
         'output-type=',
         'species-order=',
         'species-order-file=',
+        'replace-delim',
         'prefix-delim=',
         'prefix-species-names',
         'orthovenn',
         'help'
     )
-    short_flags = 'd:o:O:pS:vh'
+    short_flags = 'd:o:O:D:pS:vh'
     
     try:
         options, arguments = getopt(argv, short_flags, long_flags)
@@ -137,6 +149,8 @@ def main(argv):
             output_type = value
         elif flag in ('-d','--prefix-delim'):
             species_delim = value
+        elif flag in ('-D','--replace-delim'):
+            replace_delim = value
         elif flag in ('-p','--prefix-species-names'):
             species_prefix = True
         elif flag in ('-S','--species-order','--species-order-file'):
@@ -183,7 +197,7 @@ def main(argv):
         for g in range(num(ortho.groups)):
             for s in range(num(ortho.species)):
                 ortho.groups[g][s] = tuple(
-                    map(lambda L: ortho.species[s] + species_delim + L,
+                    map(lambda L: ortho.species[s] + species_delim + L.replace(species_delim,replace_delim),
                         ortho.groups[g][s])
                 )
         
@@ -206,7 +220,7 @@ def main(argv):
                 if len(ortho.groups[g][s]) > 0:
                     output_file.write("%s%s" % (sep, _TAB.join(ortho.groups[g][s])))
                     sep = _TAB
-            output_file.write(_EOL)            
+            output_file.write(_LF)
     else:
         ortho.to_table(output_file)
 

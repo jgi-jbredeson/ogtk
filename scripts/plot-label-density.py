@@ -4,6 +4,7 @@ import os
 import sys
 import math
 import numpy
+import bisect
 import pandas
 import getopt
 import matplotlib.pyplot as plotter
@@ -156,9 +157,9 @@ def plot_color_legend(lg_colors, file=None):
 def write_color_legend(lg_colors, file):
     legend_type = infer_output_type(file)
     file = file[:-len(legend_type)] + 'tsv'
-    with open(file, 'wt') as colorsfile:
+    with open(file, 'wt') as colors_file:
         for lg in lg_colors:
-            colorsfile.write('%s\t"%s"\n' % (lg, to_hex(lg_colors[lg])))
+            colors_file.write('%s\t"%s"\n' % (lg, to_hex(lg_colors[lg])))
         
 
             
@@ -183,10 +184,10 @@ def get_chrom_offsets(locus_bed, system='genomic'):
 
 
 
-def read_colors(colorfile_name):
+def read_color_legend(color_legend_name):
     colordict = {}
-    colorfile = open(colorfile_name, 'r')
-    for line in colorfile:
+    color_legend = open(color_legend_name, 'r')
+    for line in color_legend:
         line = line.strip()
         if line == '' or line.startswith('#'):
             continue
@@ -194,7 +195,7 @@ def read_colors(colorfile_name):
     
         colordict[fields[0]] = fields[1].strip(""""'""")
 
-    colorfile.close()
+    color_legend.close()
     
     return colordict
 
@@ -203,31 +204,50 @@ def read_colors(colorfile_name):
 def read_table(file_name, header=None, types=None):
     input_table = pandas.read_table(file_name, header=None, sep="\t")
 
-    if header is None:
-        header = list(input_table.columns)
-    else:
-        input_table = input_table[list(range(num(header)))]
-        input_table.columns = header
-    
-    if types is not None:
-        assert num(types) == num(header), \
-            'Unequal number of column names and types'
+    if header:
+        if types:
+            assert num(types) == num(header), \
+                'Unequal number of column names and types'
         
+        num_columns = min(num(input_table.columns), num(header))
+        if num(input_table.columns) > num_columns:
+            # more columns than header, cut down table:
+            input_table = input_table[list(range(num_columns))]
+        else:
+            # fewer columns than header, cut down header:
+            header = header[:num_columns]
+            types = types[:num_columns]
+            
+        # input_table = input_table[list(range(num(header)))]
+        input_table.columns = header
         input_table = input_table.astype(dict(zip(header, types)))
         
     return input_table
 
 
 
-def index_bed(input_bed):
+def index_bed(input_bed, reference_bed=None):
+    """Assumes reference_bed is NOT already indexed"""
     indexed_bed = []
-    for chr_name in input_bed['chr'].unique():
-        chr_loci = input_bed[input_bed['chr'] == chr_name].copy()
-        chr_loci.loc[:,'beg'] = list(range(0, num(chr_loci)))
-        chr_loci.loc[:,'end'] = list(range(1, num(chr_loci)+1))
-        indexed_bed.append(chr_loci)
+    if reference_bed is None:
+        for chr_name in input_bed['chr'].unique():
+            chr_loci = input_bed[input_bed['chr'] == chr_name].copy()
+            chr_loci.loc[:,'beg'] = list(range(0, num(chr_loci)))
+            chr_loci.loc[:,'end'] = list(range(1, num(chr_loci)+1))
+            indexed_bed.append(chr_loci)
+    else:
+        # find nearest indices for loci in input_bed that correspond to reference_bed
+        for chr_name in reference_bed['chr'].unique():
+            chr_loci = input_bed[input_bed['chr'] == chr_name].copy()
+            ref_loci = reference_bed[reference_bed['chr'] == chr_name]
+            ref_beg  = list(ref_loci.beg)
+            ref_end  = list(ref_loci.end)
+            for i in chr_loci.index:
+                chr_loci.loc[i,'beg'] = bisect.bisect_right(ref_end, chr_loci.loc[i,'beg'])
+                chr_loci.loc[i,'end'] = bisect.bisect_left(ref_beg, chr_loci.loc[i,'end'])
+            indexed_bed.append(chr_loci)
     return pandas.concat(indexed_bed, ignore_index=True)
-
+        
 
 
 def sort_bed(input_bed, order):
@@ -251,13 +271,15 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Usage: %s [options] <locus.bed> <locus-to-lg.tsv>\n" % __program__)
     stream.write("\n")
     stream.write("Options:\n")
-    stream.write("    -A,--adaptive-binning         Optimize binning boundaries\n")
-    stream.write("    -C,--color-map-file <file>    LG-to-color map file\n")
-    stream.write("    -c,--coordinate-system <str>  Plot coordinates in {genomic,ordinal}\n")
-    stream.write("    -O,--output-type <str>        Output image format [%s]\n" % _valid_output_types[0])
-    stream.write("    -o,--output-file <str>        Output file name [input-prefix]\n")
-    stream.write("    -w,--bin-width <uint>         Bin width in number of loci [10]\n")
-    stream.write("    -h,--help                     Print this help message and exit.\n")
+    stream.write("    -A,--adaptive-binning          Optimize binning boundaries\n")
+    stream.write("    -C,--input-color-legend <file> Input LG-to-color map file name\n")
+    stream.write("    -c,--coordinate-system <str>   Plot coordinates in {genomic,ordinal}\n")
+    stream.write("    -l,--output-color-legend <str> Output LG-to-color map file name [null]\n")
+    stream.write("    -O,--output-type <str>         Output image format [%s]\n" % _valid_output_types[0])
+    stream.write("    -o,--output-file <str>         Output file name [input-prefix]\n")
+    stream.write("    -w,--bin-width <uint>          Bin width in number of loci [10]\n")
+    stream.write("    -x,--centromere-bed <file>     BED file of centromere positions [null]\n")
+    stream.write("    -h,--help                      Print this help message and exit.\n")
     stream.write("\n")
     stream.write("\n%s" % message)
     sys.exit(exitcode)
@@ -265,38 +287,52 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 
 
 def main(argv):
-    short_options = 'hAC:c:O:o:w:l:'
+    short_options = 'hAC:c:O:o:w:l:x:'
     long_options = (
         'help',
         'adaptive-binning',
         'bin-width=',
         'coordinate-system=',
-        'color-map-file=',
+        'input-color-legend=','color-map-file=',
+        'centromere-bed=',
         'output-file=',
         'output-type=',
-        'output-legend-file=',
+        'output-color-legend=',
     )
     try:
         options, arguments = getopt.getopt(argv, short_options, long_options)
     except getopt.GetoptError as message:
         usage(message)
 
+    ypadding = 0.4
     bin_width = 10
     output_type = None
     output_file = None
-    legend_file = None
     adaptive_binning = False
-    colorsfile_name = None
+    input_color_legend_name = None
+    output_color_legend_name = None
+    centromere_bed = None
+    centromere_bed_name = None
     coordinate_system = _valid_coordinate_systems[0]
     for flag, value in options:
-        if   flag in ('-h','--help'): usage(exitcode=0)
-        elif flag in ('-w','--bin-width'): bin_width = int(value)
-        elif flag in ('-A','--adaptive-binning'): adaptive_binning = True
-        elif flag in ('-C','--color-map-file'): colorsfile_name = value
-        elif flag in ('-c','--coordinate-system'): coordinate_system = value
-        elif flag in ('-O','--output-type'): output_type = value
-        elif flag in ('-o','--output-file'): output_file = value
-        elif flag in ('-l','--output-legend-file'): legend_file = value
+        if   flag in ('-h','--help'):
+            usage(exitcode=0)
+        elif flag in ('-w','--bin-width'):
+            bin_width = int(value)
+        elif flag in ('-A','--adaptive-binning'):
+            adaptive_binning = True
+        elif flag in ('-C','--input-color-legend','--color-map-file'):
+            input_color_legend_name = value
+        elif flag in ('-c','--coordinate-system'):
+            coordinate_system = value
+        elif flag in ('-l','--output-color-legend'):
+            output_color_legend_name = value
+        elif flag in ('-O','--output-type'):
+            output_type = value
+        elif flag in ('-o','--output-file'):
+            output_file = value
+        elif flag in ('-x','--centromere-bed'):
+            centromere_bed_name = value
 
     if coordinate_system not in _valid_coordinate_systems:
         usage('Unsupported coordinate system: `%s`' % coordinate_system)
@@ -314,51 +350,58 @@ def main(argv):
     else:
         output_type = infer_output_type(output_file, output_type)
         
-    locusbed_name = arguments[0]
-    locusmap_name = arguments[1]
+    locus_bed_name = arguments[0]
+    locus_map_name = arguments[1]
 
-    locus_bed = read_table(locusbed_name, header=_bed_field_names, types=_bed_field_types)
-    locus_map = read_table(locusmap_name, header=_map_field_names, types=_map_field_types)
+    locus_bed = read_table(locus_bed_name, header=_bed_field_names, types=_bed_field_types)
+    locus_map = read_table(locus_map_name, header=_map_field_names, types=_map_field_types)
 
-    if coordinate_system == 'ordinal':
-        locus_bed = index_bed(locus_bed)
+    if centromere_bed_name is not None:
+        centromere_bed = read_table(centromere_bed_name, header=_bed_field_names, types=_bed_field_types)
     
+    if coordinate_system == 'ordinal':
+        if centromere_bed is not None:
+            centromere_bed = index_bed(centromere_bed, locus_bed)
+        locus_bed = index_bed(locus_bed)
+
+
     chr_size = get_chrom_sizes(locus_bed)
     chr_offset = get_chrom_offsets(locus_bed)
     
     labeled_loci = pandas.merge(locus_bed, locus_map, on='name', how='inner')
     labeled_loci = sort_bed(labeled_loci, chr_offset)
 
-    if colorsfile_name is None:
+    if input_color_legend_name is None:
         label_colors = {}
         label_index = {}
         for i, label in enumerate(locus_map['label'].unique()):
             label_colors[label] = _default_colors[i]
             label_index[label] = i
     else:
-        label_colors = read_colors(colorsfile_name)
+        label_colors = read_color_legend(input_color_legend_name)
         label_index = dict(zip(label_colors, range(len(label_colors))))
 
 
     max_size = max(chr_size.values())
     num_chr = num(locus_bed['chr'].unique())
-
+    max_index = num_chr - 1
+    
     fig, ax = plotter.subplots(num_chr, figsize=(8, num_chr))
-    fig.tight_layout()
-
+    plotter.subplots_adjust(left=0.0, right=1, top=1, bottom=0.0)
+    
     for chr_index, chr_name in enumerate(locus_bed['chr'].unique()):
         chr_loci = labeled_loci[labeled_loci['chr'] == chr_name]
 
         if num(chr_loci) < 1:
-            ax[chr_index].hlines(0, 0, chr_size[chr_name], linewidth=3.0, color='black')
-            ax[chr_index].set_xbound(0, max_size)
-            ax[chr_index].set_ybound(0, 1)
-            ax[chr_index].spines['bottom'].set_visible(False)
-            ax[chr_index].spines['right'].set_visible(False)
-            ax[chr_index].spines['top'].set_visible(False)
-            ax[chr_index].get_yaxis().set_ticks([])
-            ax[chr_index].set_ylabel(chr_name)
+            if centromere_bed is not None:
+                cen_loci = centromere_bed[centromere_bed['chr'] == chr_name]
+                cen_pos = 0.5 * (cen_loci.loc[:,'beg'] + cen_loci.loc[:,'end'])
+            else:
+                cen_pos = None
+            plot_chr(ax[chr_index], max_size, chr_size[chr_name], centromere=cen_pos)
+            plot_axes(ax[chr_index], max_size, label=chr_name, ypad=ypadding, xlab=(chr_index == max_index))
             continue
+
         
         if adaptive_binning:
             blocks = get_blocks(chr_loci['label'], label_index, bin_width, bin_shift=1)
@@ -409,22 +452,59 @@ def main(argv):
             )
             bottom += chr_freq[label_index[label],:]
 
-        ax[chr_index].hlines(0, 0, chr_size[chr_name], linewidth=3.0, color='black')
-        ax[chr_index].set_xbound(0, max_size)
-        ax[chr_index].set_ybound(0, 1)
-        ax[chr_index].spines['bottom'].set_visible(False)
-        ax[chr_index].spines['right'].set_visible(False)
-        ax[chr_index].spines['top'].set_visible(False)
-        ax[chr_index].get_yaxis().set_ticks([])
-        ax[chr_index].set_ylabel(chr_name)
-    
+            
+        if centromere_bed is not None:
+            cen_loci = centromere_bed[centromere_bed['chr'] == chr_name]
+            cen_pos = 0.5 * (cen_loci.loc[:,'beg'] + cen_loci.loc[:,'end'])
+        else:
+            cen_pos = None
+        plot_chr(ax[chr_index], max_size, chr_size[chr_name], centromere=cen_pos)
+        plot_axes(ax[chr_index], max_size, label=chr_name, ypad=ypadding, xlab=(chr_index == max_index))
+
+    fig.tight_layout()     
     plotter.savefig(output_file, format=output_type)
 
-    if legend_file:
-        plot_color_legend(label_colors, file=legend_file)
-        write_color_legend(label_colors, file=legend_file)
+    if output_color_legend_name:
+        plot_color_legend(label_colors, file=output_color_legend_name)
+        write_color_legend(label_colors, file=output_color_legend_name)
 
 
+def plot_axes(axes, max_size, label=None, xpad=0.04, ypad=0.04, xlab=True):
+    axes.set_xbound(-1*xpad*max_size, (1+xpad)*max_size)
+    axes.set_ybound(-1*ypad, 1.00)
+    axes.spines['bottom'].set_visible(False)
+    axes.spines['right'].set_visible(False)
+    axes.spines['left'].set_visible(False)
+    axes.spines['top'].set_visible(False)
+    axes.yaxis.set_ticks([])
+    if not xlab:
+        # axes.xaxis.set_ticks([])
+        axes.xaxis.set_ticklabels([])
+    axes.set_ylabel(label)
+
+
+def plot_chr(axes, max_size, chr_size, centromere=None):
+    if centromere is None:
+        _plot_chr_without_centromere(axes, max_size, chr_size, ypos=-0.1)
+    else:
+        _plot_chr_with_centromere(axes, max_size, chr_size, centromere, ypos=-0.1)
+
+        
+def _plot_chr_with_centromere(axes, max_size, chr_size, centromere, ypos=0):
+    padding = 0.01 * max_size
+    Larm = centromere - padding
+    Rarm = (chr_size - centromere) - padding
+    
+    axes.hlines(ypos, 0, Larm, linewidth=8, color='black', capstyle='round')
+    axes.hlines(ypos, centromere + padding, centromere + padding + Rarm, linewidth=8, color='black', capstyle='round')
+    axes.plot(centromere, ypos, marker='.', markersize=12.5, color="lightgrey")
+
+    
+def _plot_chr_without_centromere(axes, max_size, chr_size, ypos=0):
+    axes.hlines(ypos, 0, chr_size, linewidth=8, color='black', capstyle='round')
+    
+    
+        
         
 if __name__ == '__main__':
     main(sys.argv[1:])

@@ -288,38 +288,6 @@ def inferLGlogically(ortho_group, species_index, specific=False):
     sca_intersects_ofu = sca_code & ofu_code
 
 
-
-    
-    # 1. If the provisional JV letter(s) match the corresponding Bla letters,
-    #    then the ancestry of that gene family is most parsimoniously that
-    #     letter. 
-    
-    # 2.  If the provisional JV letter(s) match Bla, but do not match either
-    #     of Sca or Lva, then that is a translocation either on the base of
-    #     jawed vertebrates or in the Sca/Lva lineages.
-    
-    # 3. If the provisional JV letter(s) dont match the corresponding Bla
-    #    letter(s), but they do match one or both of Sca or Lva (when
-    #    available), then the ancestry of that gene family is most
-    #    parsimoniously of that letter, with translocation (or misassembly)
-    #    in Bla.
-    
-    # 4. If the Bla letter and one of Sca/Lva match, but are different from
-    #    the provisional JV letter, then that means that the ancestry is the
-    #    Bla/Sca/Lva letter, and a translocation occurred at the base of the
-    #    jawed vertebrates.        
-    
-    # 5. if there is no Bla gene, but the provisional JVI letter(s) matches
-    #    Sca or Lva, then the ancestry of that gene family inherited from
-    #    Sca/Lva.
-    
-    # 6. if there is no Bla gene, and the provisional JVI letter(s) disagrees
-    #    with both Sca or Lva, then the ancestry is ambiguous, and that gene
-    #    could have been translocated 
-    
-    # ++ within each of the JV families, we can play the same game to look at
-    #    translocations/misassemblies in each lineage
-
     comments = []    
     consensus = set()
     if not consensus and bla_intersects_lva:
@@ -482,8 +450,8 @@ def RULE_BASED(argv):
         )
         
         codes, comments = inferLGlogically(ortho.groups[g], species_index, specific=True)
-        if codes is _ambiguous:
-           codes, comments = inferLGlogically(ortho.groups[g], species_index, specific=False)
+        # if codes is _ambiguous:
+        #   codes, comments = inferLGlogically(ortho.groups[g], species_index, specific=False)
            
         codes = sorted(collapseLGs(codes))
 

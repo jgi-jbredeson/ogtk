@@ -41,7 +41,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Options:\n")
     stream.write("  -g,--group-by <enum>\n")
     stream.write("     Group output by membership (=1), number of Multiples (=2) [0]\n")
-    stream.wrote("     (See the `--max-count` option below)\n")
+    stream.write("     (See the `--max-count` option below)\n")
     stream.write("\n")
     stream.write("  -I,--ignore-unplaced-strictly\n")
     stream.write("     Strictly ignore unplaced sequences in filtering. If a cell in the\n")
