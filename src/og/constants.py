@@ -28,7 +28,8 @@ __all__ = (
     '_PIPE',
     '_SPACE',
     '_TAB',
-    'range'
+    'range',
+    'dict'
 )
 
 
@@ -62,3 +63,8 @@ if _PYTHON_VERSION < (3,):
 else:
     range = _dummy
 
+_dummy = dict
+if _PYTHON_VERSION < (3,7):
+    dict = collections.OrderedDict
+else:
+    dict = _dummy

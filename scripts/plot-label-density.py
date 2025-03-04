@@ -9,6 +9,8 @@ import pandas
 import getopt
 import matplotlib.pyplot as plotter
 
+from og.constants import dict
+from og.core.utils import index_list
 from matplotlib.colors import to_hex
 from matplotlib import colormaps as cmaps
 
@@ -43,7 +45,7 @@ def get_num_bins(num_data, bin_width=1, bin_shift=1):
 
 
 
-def get_frequencies(data, labels, bin_width=1, bin_shift=1):
+def get_freqs(data, labels, bin_width=1, bin_shift=1):
     """
     The data object is a pandas.Series and the labels object is a dictionary
     containing labels as keys and indices as values
@@ -73,7 +75,7 @@ def get_frequencies(data, labels, bin_width=1, bin_shift=1):
 
 def get_blocks(data, labels, bin_width=1, bin_shift=1):
     num_bins = get_num_bins(num(data), bin_width, bin_shift)
-    bin_freq, _, _ = get_frequencies(data, labels, bin_width, bin_shift)
+    bin_freq, _, _ = get_freqs(data, labels, bin_width, bin_shift)
     bin_max = bin_freq.argmax(1)
 
     blocks = []
@@ -107,7 +109,7 @@ def infer_output_type(output_file, output_type=None):
         else:
             output_type = _valid_output_types[0]
     if output_type not in _valid_output_types:
-        usage('Invalid output image type: `%s`' % output_type)
+        usage('Unsupported image type: `%s`' % output_type)
     return output_type
 
 
@@ -261,6 +263,145 @@ def sort_bed(input_bed, order):
         
 
 
+def plot_axes(axes, max_size, label=None, xpad=0.04, ypad=0.04, xlab=True):
+    axes.set_xbound(-1*xpad*max_size, (1+xpad)*max_size)
+    axes.set_ybound(-1*ypad, 1.00)
+    axes.spines['bottom'].set_visible(False)
+    axes.spines['right'].set_visible(False)
+    axes.spines['left'].set_visible(False)
+    axes.spines['top'].set_visible(False)
+    axes.yaxis.set_ticks([])
+    if not xlab:
+        # axes.xaxis.set_ticks([])
+        axes.xaxis.set_ticklabels([])
+    axes.set_ylabel(label)
+
+
+    
+def plot_chr_glyph(axes, max_size, chr_size, centromere=None):
+    if centromere is None:
+        _plot_chr_without_centromere(axes, max_size, chr_size, ypos=-0.1)
+    else:
+        _plot_chr_with_centromere(axes, max_size, chr_size, centromere, ypos=-0.1)
+
+        
+        
+def _plot_chr_with_centromere(axes, max_size, chr_size, centromere, ypos=0):
+    #TODO: handling multiple centromeres
+    padding = 0.01 * max_size
+    Larm = centromere - padding
+    Rarm = (chr_size - centromere) - padding
+    
+    axes.hlines(ypos, 0, Larm, linewidth=8, color='black', capstyle='round')
+    axes.hlines(ypos, centromere + padding, centromere + padding + Rarm, linewidth=8, color='black', capstyle='round')
+    axes.plot(centromere, ypos, marker='.', markersize=12.5, color="lightgrey")
+
+
+    
+def _plot_chr_without_centromere(axes, max_size, chr_size, ypos=0):
+    axes.hlines(ypos, 0, chr_size, linewidth=8, color='black', capstyle='round')
+
+
+
+def get_centromeres(centromeres, chr_name):
+    if centromeres is not None:
+        cen_loci = centromeres[centromeres['chr'] == chr_name]
+        if num(cen_loci):
+            return 0.5 * (cen_loci.loc[:,'beg'] + cen_loci.loc[:,'end'])
+
+    return None
+
+
+
+def get_colors(locus_map, file=None):
+    label_colors = {}
+    label_index = 0
+    if file is not None:
+        label_colors = read_color_legend(file)
+        
+    for label in locus_map['label'].unique():
+        if label not in label_colors:
+            label_colors[label] = _default_colors[label_index]
+            label_index += 1
+
+    return label_colors
+
+
+
+def get_bin_freqs(chr_loci, bin_width=10, bin_shift=10,
+                  label_colors=None, label_index=None, adaptive_binning=False):
+    if label_index is None:
+        label_index = index_list(label_colors)
+
+    if adaptive_binning:
+        blocks = get_blocks(chr_loci['label'], label_index, bin_width, bin_shift=1)
+    else:
+        blocks = [(chr_loci.index[0], chr_loci.index[-1] + 1)]
+    
+    bin_freq = None
+    bin_begs = []
+    bin_ends = []
+    for block_beg, block_end in blocks:
+        block_loci = chr_loci.loc[block_beg:block_end]
+        
+        _bin_freq, _bin_begs, _bin_ends = \
+            get_freqs(
+                block_loci['label'],
+                label_index,
+                bin_width=bin_width,
+                bin_shift=bin_width
+            )
+        
+        if bin_freq is None:
+            bin_freq = _bin_freq
+        else:
+            bin_freq = numpy.vstack((bin_freq, _bin_freq))
+            
+        bin_begs.extend(_bin_begs)
+        bin_ends.extend(_bin_ends)
+        
+    assert num(bin_freq) == num(bin_begs) == num(bin_ends), \
+        'Mismatched number of frequencies and bin positions'
+    
+    chr_freq = bin_freq.transpose()
+    chr_begs = numpy.zeros(num(bin_begs), dtype=numpy.int64)
+    chr_ends = numpy.zeros(num(bin_ends), dtype=numpy.int64)
+    for i in range(num(bin_ends)):
+        chr_begs[i] = chr_ends[i-1]
+        chr_ends[i] = chr_loci['end'][bin_ends[i]]
+        
+    return chr_freq, chr_begs, chr_ends
+
+
+
+def plot_chr_freqs(axes, chr_loci, bin_width=10, bin_shift=10,
+                   label_colors=None, label_index=None, adaptive_binning=False):
+    if label_index is None:
+        label_index = index_list(label_colors)
+
+    chr_freq, chr_begs, chr_ends = \
+        get_bin_freqs(
+            chr_loci,
+            bin_width=bin_width,
+            bin_shift=bin_width,
+            label_colors=label_colors,
+            adaptive_binning=adaptive_binning
+        )
+
+    bottom = numpy.zeros(num(chr_ends))
+    for label in label_index:
+        axes.bar(
+            x=chr_begs, 
+            height=chr_freq[label_index[label],:], 
+            width=chr_ends-chr_begs,
+            bottom=bottom,
+            color=label_colors[label],
+            align='edge'
+        )
+        bottom += chr_freq[label_index[label],:]
+
+
+    
 def usage(message=None, exitcode=1, stream=sys.stderr):
     message = '' if message is None else 'ERROR: %s\n\n' % message
     stream.write("\n")
@@ -271,15 +412,44 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Usage: %s [options] <locus.bed> <locus-to-lg.tsv>\n" % __program__)
     stream.write("\n")
     stream.write("Options:\n")
-    stream.write("    -A,--adaptive-binning          Optimize binning boundaries\n")
-    stream.write("    -C,--input-color-legend <file> Input LG-to-color map file name\n")
-    stream.write("    -c,--coordinate-system <str>   Plot coordinates in {genomic,ordinal}\n")
-    stream.write("    -l,--output-color-legend <str> Output LG-to-color map file name [null]\n")
-    stream.write("    -O,--output-type <str>         Output image format [%s]\n" % _valid_output_types[0])
-    stream.write("    -o,--output-file <str>         Output file name [input-prefix]\n")
-    stream.write("    -w,--bin-width <uint>          Bin width in number of loci [10]\n")
-    stream.write("    -x,--centromere-bed <file>     BED file of centromere positions [null]\n")
-    stream.write("    -h,--help                      Print this help message and exit.\n")
+    #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
+    #            0         10         20       30        40        50        60        70        80
+    stream.write("    -A,--adaptive-binning\n")
+    stream.write("       Optimizes binning boundaries where the majority label changes class\n")
+    stream.write("       This is achieved by modulating the number of loci in each window,\n")
+    stream.write("       (i.e. window size becomes dynamic).\n")
+    stream.write("\n")
+    stream.write("    -C,--input-color-legend <file>\n")
+    stream.write("       Input LG-to-color map file name. A two-column tab-separated table\n")
+    stream.write("       with LG label in the first column and color in second. Colors can\n")
+    stream.write("       be matplotlib.colormap names or quoted RGB hex values.\n")
+    stream.write("       (default: tab10)\n")
+    stream.write("\n")
+    stream.write("    -c,--coordinate-system <str>\n")
+    stream.write("       Output plot in coordinate system. Enumerative: {genomic,ordinal}\n")
+    stream.write("       (default: genomic)\n")
+    stream.write("\n")
+    stream.write("    -l,--output-color-legend <str>\n")
+    stream.write("       Output LG-to-color map file name in format defined above.\n")
+    stream.write("\n")
+    stream.write("    -O,--output-type <str>\n")
+    stream.write("       Output plots in image file format. Enumerative: {%s}\n" % ','.join(_valid_output_types))
+    stream.write("       (default: %s)\n" % _valid_output_types[0])
+    stream.write("\n")
+    stream.write("    -o,--output-file <str>\n")
+    stream.write("       Output plot file using the specified file name\n")
+    stream.write("       (default: input file prefix)\n")
+    stream.write("\n")
+    stream.write("    -w,--bin-width <uint>\n")
+    stream.write("       Plot label class densities in bins of the specified number of loci.\n")
+    stream.write("       (default: 10)\n")
+    stream.write("\n")
+    stream.write("    -x,--centromere-bed <file>\n")
+    stream.write("       Input BED-formatted file of centromere positions. Adds a circle to\n")
+    stream.write("       each chromosome glyph plotted to represent each centromere location.\n")
+    stream.write("\n")
+    stream.write("    -h,--help\n")
+    stream.write("       Print this help message and exit.\n")
     stream.write("\n")
     stream.write("\n%s" % message)
     sys.exit(exitcode)
@@ -371,95 +541,44 @@ def main(argv):
     labeled_loci = pandas.merge(locus_bed, locus_map, on='name', how='inner')
     labeled_loci = sort_bed(labeled_loci, chr_offset)
 
-    if input_color_legend_name is None:
-        label_colors = {}
-        label_index = {}
-        for i, label in enumerate(locus_map['label'].unique()):
-            label_colors[label] = _default_colors[i]
-            label_index[label] = i
-    else:
-        label_colors = read_color_legend(input_color_legend_name)
-        label_index = dict(zip(label_colors, range(len(label_colors))))
-
-
+    label_colors = get_colors(locus_map, file=input_color_legend_name)
+        
+    #TODO: need to check that there is a color for every label and assign if not.
+        
     max_size = max(chr_size.values())
     num_chr = num(locus_bed['chr'].unique())
     max_index = num_chr - 1
     
     fig, ax = plotter.subplots(num_chr, figsize=(8, num_chr))
-    plotter.subplots_adjust(left=0.0, right=1, top=1, bottom=0.0)
-    
+    plotter.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0)
+
     for chr_index, chr_name in enumerate(locus_bed['chr'].unique()):
         chr_loci = labeled_loci[labeled_loci['chr'] == chr_name]
+        cen_loci = get_centromeres(centromere_bed, chr_name)
 
-        if num(chr_loci) < 1:
-            if centromere_bed is not None:
-                cen_loci = centromere_bed[centromere_bed['chr'] == chr_name]
-                cen_pos = 0.5 * (cen_loci.loc[:,'beg'] + cen_loci.loc[:,'end'])
-            else:
-                cen_pos = None
-            plot_chr(ax[chr_index], max_size, chr_size[chr_name], centromere=cen_pos)
-            plot_axes(ax[chr_index], max_size, label=chr_name, ypad=ypadding, xlab=(chr_index == max_index))
-            continue
-
-        
-        if adaptive_binning:
-            blocks = get_blocks(chr_loci['label'], label_index, bin_width, bin_shift=1)
-        else:
-            blocks = [(chr_loci.index[0], chr_loci.index[-1] + 1)]
-    
-        bin_freq = None
-        bin_begs = []
-        bin_ends = []
-        for block_beg, block_end in blocks:
-            block_loci = chr_loci.loc[block_beg:block_end]
-
-            _bin_freq, _bin_begs, _bin_ends = \
-                get_frequencies(
-                    block_loci['label'],
-                    label_index,
-                    bin_width=bin_width,
-                    bin_shift=bin_width
-                )
-
-            if bin_freq is None:
-                bin_freq = _bin_freq
-            else:
-                bin_freq = numpy.vstack((bin_freq, _bin_freq))
-                
-            bin_begs.extend(_bin_begs)
-            bin_ends.extend(_bin_ends)
-
-        assert num(bin_freq) == num(bin_begs) == num(bin_ends), \
-            'Mismatched number of frequencies and bin positions'
-
-        chr_freq = bin_freq.transpose()
-        chr_begs = numpy.zeros(num(bin_begs), dtype=numpy.int64)
-        chr_ends = numpy.zeros(num(bin_ends), dtype=numpy.int64)
-        for i in range(num(bin_ends)):
-            chr_begs[i] = chr_ends[i-1]
-            chr_ends[i] = chr_loci['end'][bin_ends[i]]
-
-        bottom = numpy.zeros(num(chr_ends))
-        for label in label_index:
-            ax[chr_index].bar(
-                x=chr_begs, 
-                height=chr_freq[label_index[label],:], 
-                width=chr_ends-chr_begs, 
-                bottom=bottom, 
-                color=label_colors[label], 
-                align='edge'
+        if num(chr_loci):    
+            plot_chr_freqs(
+                ax[chr_index],
+                chr_loci,
+                bin_width=bin_width,
+                bin_shift=bin_width,
+                label_colors=label_colors,
+                adaptive_binning=adaptive_binning
             )
-            bottom += chr_freq[label_index[label],:]
-
             
-        if centromere_bed is not None:
-            cen_loci = centromere_bed[centromere_bed['chr'] == chr_name]
-            cen_pos = 0.5 * (cen_loci.loc[:,'beg'] + cen_loci.loc[:,'end'])
-        else:
-            cen_pos = None
-        plot_chr(ax[chr_index], max_size, chr_size[chr_name], centromere=cen_pos)
-        plot_axes(ax[chr_index], max_size, label=chr_name, ypad=ypadding, xlab=(chr_index == max_index))
+        plot_chr_glyph(
+            ax[chr_index],
+            max_size,
+            chr_size[chr_name],
+            centromere=cen_loci
+        )
+        plot_axes(
+            ax[chr_index],
+            max_size,
+            label=chr_name,
+            ypad=ypadding,
+            xlab=(chr_index == max_index)
+        )
 
     fig.tight_layout()     
     plotter.savefig(output_file, format=output_type)
@@ -469,42 +588,6 @@ def main(argv):
         write_color_legend(label_colors, file=output_color_legend_name)
 
 
-def plot_axes(axes, max_size, label=None, xpad=0.04, ypad=0.04, xlab=True):
-    axes.set_xbound(-1*xpad*max_size, (1+xpad)*max_size)
-    axes.set_ybound(-1*ypad, 1.00)
-    axes.spines['bottom'].set_visible(False)
-    axes.spines['right'].set_visible(False)
-    axes.spines['left'].set_visible(False)
-    axes.spines['top'].set_visible(False)
-    axes.yaxis.set_ticks([])
-    if not xlab:
-        # axes.xaxis.set_ticks([])
-        axes.xaxis.set_ticklabels([])
-    axes.set_ylabel(label)
-
-
-def plot_chr(axes, max_size, chr_size, centromere=None):
-    if centromere is None:
-        _plot_chr_without_centromere(axes, max_size, chr_size, ypos=-0.1)
-    else:
-        _plot_chr_with_centromere(axes, max_size, chr_size, centromere, ypos=-0.1)
-
-        
-def _plot_chr_with_centromere(axes, max_size, chr_size, centromere, ypos=0):
-    padding = 0.01 * max_size
-    Larm = centromere - padding
-    Rarm = (chr_size - centromere) - padding
-    
-    axes.hlines(ypos, 0, Larm, linewidth=8, color='black', capstyle='round')
-    axes.hlines(ypos, centromere + padding, centromere + padding + Rarm, linewidth=8, color='black', capstyle='round')
-    axes.plot(centromere, ypos, marker='.', markersize=12.5, color="lightgrey")
-
-    
-def _plot_chr_without_centromere(axes, max_size, chr_size, ypos=0):
-    axes.hlines(ypos, 0, chr_size, linewidth=8, color='black', capstyle='round')
-    
-    
-        
         
 if __name__ == '__main__':
     main(sys.argv[1:])

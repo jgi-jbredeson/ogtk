@@ -1,6 +1,8 @@
 
+from og.constants import dict
+
 def count_items(items):
-    count = {}
+    count = dict()
     for item in items:
         if item in count:
             count[item] += 1
