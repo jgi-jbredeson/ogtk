@@ -157,12 +157,10 @@ def plot_color_legend(lg_colors, file=None):
 
 
 def write_color_legend(lg_colors, file):
-    legend_type = infer_output_type(file)
-    file = file[:-len(legend_type)] + 'tsv'
     with open(file, 'wt') as colors_file:
         for lg in lg_colors:
             colors_file.write('%s\t"%s"\n' % (lg, to_hex(lg_colors[lg])))
-        
+
 
             
 def get_chrom_sizes(locus_bed, system='genomic'):
@@ -415,14 +413,14 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
     #            0         10         20       30        40        50        60        70        80
     stream.write("    -A,--adaptive-binning\n")
-    stream.write("       Optimizes binning boundaries where the majority label changes class\n")
-    stream.write("       This is achieved by modulating the number of loci in each window,\n")
-    stream.write("       (i.e. window size becomes dynamic).\n")
+    stream.write("       Optimizes binning boundaries where the majority label changes\n")
+    stream.write("       class. This is achieved by modulating the number of loci in each\n")
+    stream.write("       window (i.e., window size becomes dynamic).\n")
     stream.write("\n")
     stream.write("    -C,--input-color-legend <file>\n")
-    stream.write("       Input LG-to-color map file name. A two-column tab-separated table\n")
-    stream.write("       with LG label in the first column and color in second. Colors can\n")
-    stream.write("       be matplotlib.colormap names or quoted RGB hex values.\n")
+    stream.write("       Input label-to-color map file name. A two-column tab-separated\n")
+    stream.write("       table with label in the first column and color in second. Colors\n")
+    stream.write("       can be matplotlib.colormap names or quoted RGB hex values.\n")
     stream.write("       (default: tab10)\n")
     stream.write("\n")
     stream.write("    -c,--coordinate-system <str>\n")
@@ -430,26 +428,33 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("       (default: genomic)\n")
     stream.write("\n")
     stream.write("    -l,--output-color-legend <str>\n")
-    stream.write("       Output LG-to-color map file name in format defined above.\n")
+    stream.write("       Output the label-to-color map to two files with the specified\n")
+    stream.write("       file prefix. This option outputs both a tab-separated text file\n")
+    stream.write("       and an image file of the legend in the format designated.\n")
     stream.write("\n")
     stream.write("    -O,--output-type <str>\n")
-    stream.write("       Output plots in image file format. Enumerative: {%s}\n" % ','.join(_valid_output_types))
+    stream.write("       Output plot image to file in the specified file format.\n")
+    stream.write("       Enumerative: {%s}\n" % ','.join(_valid_output_types))
     stream.write("       (default: %s)\n" % _valid_output_types[0])
     stream.write("\n")
     stream.write("    -o,--output-file <str>\n")
-    stream.write("       Output plot file using the specified file name\n")
+    stream.write("       Output plot image to file with the specified file name.\n")
     stream.write("       (default: input file prefix)\n")
     stream.write("\n")
     stream.write("    -w,--bin-width <uint>\n")
-    stream.write("       Plot label class densities in bins of the specified number of loci.\n")
+    stream.write("       Plot label class densities in bins of the specified number of\n")
+    stream.write("       loci.\n")
     stream.write("       (default: 10)\n")
     stream.write("\n")
     stream.write("    -x,--centromere-bed <file>\n")
-    stream.write("       Input BED-formatted file of centromere positions. Adds a circle to\n")
-    stream.write("       each chromosome glyph plotted to represent each centromere location.\n")
+    stream.write("       Input BED-formatted file of centromere positions. A circle is\n")
+    stream.write("       added to each chromosome glyph to represent the centromere's\n")
+    stream.write("       position.\n")
     stream.write("\n")
     stream.write("    -h,--help\n")
     stream.write("       Print this help message and exit.\n")
+    #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
+    #            0         10         20       30        40        50        60        70        80
     stream.write("\n")
     stream.write("\n%s" % message)
     sys.exit(exitcode)
@@ -584,8 +589,19 @@ def main(argv):
     plotter.savefig(output_file, format=output_type)
 
     if output_color_legend_name:
-        plot_color_legend(label_colors, file=output_color_legend_name)
-        write_color_legend(label_colors, file=output_color_legend_name)
+        plot_color_legend(
+            label_colors,
+            file='%s.%s' % (
+                output_color_legend_name,
+                output_type
+            )
+        )
+        write_color_legend(
+            label_colors,
+            file='%s.tsv' % (
+                output_color_legend_name,
+            )
+        )
 
 
         
