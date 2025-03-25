@@ -46,6 +46,23 @@ class _AssemblyReportRecord(object):
         self.genbank_accession = genbank_accession
         self.refseq_accession = refseq_accession
         self.ucsc_name = ucsc_name
+
+    def __repr__(self):
+        return '%s(%s)' % (
+            self.__class__.__name__,
+            ', '.join([
+                attr  + '=' + str(getattr(attr, 'None')) for attr in (
+                    'sequence_name',
+                    'sequence_length',
+                    'flags',
+                    'assigned_molecule',
+                    'assigned_type',
+                    'genbank_accession',
+                    'refseq_accession',
+                    'ucsc_name'
+                )
+            ])
+        )
         
     @property
     def is_primary(self):
@@ -99,6 +116,7 @@ class AssemblyReport(dict):
         
     def _parse(self, infile):
         line_count = 0
+        assembled_molecules = dict()
         for line in infile:
             line = line.lstrip().rstrip('\r\n')
             line_count += 1
@@ -108,11 +126,15 @@ class AssemblyReport(dict):
 
             fields = line.split(_TAB)
 
-            if num(fields) != 10:
+            if num(fields) < 10:
                 raise AssemblyReportFormatError(
                     "Ten fields expected, line %d" % line_count
                 )
 
+            for i in range(num(fields)):
+                if fields[i].lower() == "na":
+                    fields[i] = None
+        
             try:
                 fields[8] = int(fields[8])
             except ValueError:
@@ -120,12 +142,12 @@ class AssemblyReport(dict):
                     "Numeric field expected, line %d column %d" % (
                         line_count, 9
                     )) from None
-                
+            
             record = _AssemblyReportRecord(fields[0], fields[8])
 
-            sequence_role = fields[1].lower()
-            assigned_type = fields[3].lower()
-            assembly_unit = fields[7].lower()
+            sequence_role = None if fields[1] is None else fields[1].lower()
+            assigned_type = None if fields[3] is None else fields[3].lower()
+            assembly_unit = None if fields[7] is None else fields[7].lower()
             if sequence_role == 'alt-scaffold':
                 record.flags |= ROLE_ALT_SCAF
                 record.flags |= UNIT_ALTERNATE
@@ -137,6 +159,7 @@ class AssemblyReport(dict):
             elif sequence_role == 'novel-patch':
                 record.flags |= ROLE_NOVEL_PATCH
             elif sequence_role == 'assembled-molecule':
+                assembled_molecules[fields[2]] = fields[0]
                 record.flags |= ROLE_ASM_MOL
             elif sequence_role == 'unlocalized-scaffold':
                 record.flags |= ROLE_UNLOC_SCAF
@@ -156,17 +179,28 @@ class AssemblyReport(dict):
                 record.flags |= UNIT_NONNUCLEAR
             elif assembly_unit == 'patches':
                 record.flags |= UNIT_PATCHES
+
                 
-            if fields[4].lower() != 'na':
+            if fields[4] is not None:
                 record.genbank_accession = fields[4]
-            if fields[6].lower() != 'na':
+            if fields[6] is not None:
                 record.refseq_accession = fields[6]
-            if fields[9].lower() != 'na':
+            if fields[9] is not None:
                 record.ucsc_name = fields[9]
 
             self[record.sequence_name] = record
 
-    
+        # Map sequence-name of assembled-molecule onto assigned-molecule field:
+        for record in self.values():
+            if record.assigned_molecule is None:
+                continue
+            elif record.assigned_molecule in assembled_molecules:
+                record.assigned_molecule \
+                    = assembled_molecules[record.assigned_molecule]
+            else:
+                raise KeyError("Assigned molecule: %s" % record.assigned_molecule)
+
+                
     def from_file(self, infile, **kwargs):
         self.clear()
         if is_stream(infile):

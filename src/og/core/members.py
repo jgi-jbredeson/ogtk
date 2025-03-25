@@ -13,55 +13,48 @@ def int_placed(record, is_placed=_placed, ignore_unplaced=False):
     return +1
 
 
+def map_locus_to_sequence(locus_name, namemap, is_placed=_placed):
+    if locus_name not in namemap.loci:
+        raise KeyError(
+            "Locus name not found in loci: %s" % locus_name
+        )
+    sequence_name = namemap.loci[locus_name].chr
+    if sequence_name not in namemap.references:
+        raise KeyError(
+            "Sequence name not found in references: %s" % sequence_name
+        )
+    sequence_record = namemap.references[sequence_name]
+    if is_placed(sequence_record):
+        return sequence_record.assigned_molecule
+    return sequence_name
+
+
 def _map_loci_to_sequences(locus_names, namemap, is_placed=_placed):
     for locus_name in locus_names:
-        if locus_name not in namemap.loci:
-            raise KeyError(
-                "Locus name not found in loci: %s" % locus_name
-            )
-
-        sequence_name = namemap.loci[locus_name].chr
-        if sequence_name not in namemap.references:
-            raise KeyError(
-                "Sequence name not found in references: %s" % sequence_name
-            )
-
-        if is_placed(namemap.references[sequence_name]):
-            sequence_name = \
-                namemap.references[sequence_name].assigned_molecule
-
-        yield sequence_name
+        yield map_locus_to_sequence(
+            locus_name,
+            namemap,
+            is_placed,
+            ignore_unplaced=False
+        )
         
 
 def map_loci_to_sequences(locus_names, namemap,
                           is_placed=_placed, ignore_unplaced=False):
     count = dict()
     for locus_name in locus_names:
-        if locus_name not in namemap.loci:
-            raise KeyError(
-                "Locus name not found in loci: %s" % locus_name
-            )
+        sequence_name = map_locus_to_sequence(locus_name, namemap, is_placed)
+        increment_unit = int_placed(
+            namemap.references[sequence_name],
+            is_placed,
+            ignore_unplaced
+        )
 
-        increment_unit = 1
-        sequence_name = namemap.loci[locus_name].chr
-        if sequence_name not in namemap.references:
-            raise KeyError(
-                "Sequence name not found in references: %s" % sequence_name
-            )
-
-        if is_placed(namemap.references[sequence_name]):
-            sequence_name = \
-                namemap.references[sequence_name].assigned_molecule
-        elif ignore_unplaced:
-            if ignore_unplaced == _LENIENT:
-                increment_unit = -1
-            else:
-                continue
-
-        try:
-            count[sequence_name] += increment_unit
-        except KeyError:
-            count[sequence_name] = increment_unit
+        if increment_unit:
+            try:
+                count[sequence_name] += increment_unit
+            except KeyError:
+                count[sequence_name] = increment_unit
         
     return count
 

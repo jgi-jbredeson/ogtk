@@ -183,4 +183,164 @@ class OrthoFinderOrthogroups(Orthogroups):
         Orthogroups.clear(self)
         self.filename = None
         self.is_hog = False
+
+
+class ClusteredOrthogroups(OrthoFinderOrthogroups):
+    def __init__(self, infile=None, **kwargs):
+        OrthoFinderOrthogroups.__init__(self)
+        self._prefix = 'Cluster\tOrthogroup'
+        self.clusters = []
+        if infile is not None:
+            self.from_file(infile, **kwargs)
+
+            
+    def _parse(self, infile):
+        cluster_id = -1
+        num_fields = -1
+        species_field = 2
+        header = self._prefix
+        comment = _COMMENT + _SPACE
+        for line in infile:
+            line = line.lstrip().rstrip('\r\n')
+
+            if line == _EMPTY or \
+               line.startswith(comment):
+                continue
+            
+            if ((num_fields < 0) and
+                (line.startswith(header))):
+                fields = line.split(_TAB)
+                num_fields = num(fields)
+                self.species = list(map(str.strip, fields[species_field:]))
+                
+            elif num_fields < 0:
+                raise OrthogroupsFormatError("No header detected in: %s" % (
+                    getattr(infile,'name','<iobuffer>')
+                ))
+
+            else:
+                fields = line.split(_TAB)
+                group = []
+                for i in range(species_field, num_fields):
+                    fields[i] = fields[i].strip()
+                    if num(fields[i]) > 0:
+                        group.append(tuple(map(str.strip, fields[i].split(_COMMA))))
+                    else:
+                        group.append(tuple())
+
+                self.clusters.append(fields[0].strip())
+                self.ids.append(fields[1].strip())
+                self.groups.append(group)
+                
+        assert num(self.clusters) == num(self.ids) == num(self.groups), \
+            "Mismatched number of orthogroups, clusters, or IDs"
+
     
+    def format_orthogroups_record(self, id=None, cluster=None, prob=None, group=None, count=0, index=None):
+        if index is not None:
+            id = self.ids[index]
+            group = self.groups[index]
+            cluster = self.clusters[index]
+            
+        return _TAB.join((
+            str(cluster),
+            str(id),
+            _TAB.join(map(self._join_on_comma, group))
+        ))
+            
+    def clear(self):
+        OrthoFinderOrthogroups.clear(self)
+        self.clusters = []
+
+        
+        
+class CountedClusteredOrthogroups(OrthoFinderOrthogroups):
+    def __init__(self, infile=None, grouptag='##group=', **kwargs):
+        OrthoFinderOrthogroups.__init__(self)
+        self._prefix = 'Count\tCluster'
+        self.grouptag = grouptag
+        self.counts = []
+        self.clusters = []
+        self.probabilities = []
+        if infile is not None:
+            self.from_file(infile, **kwargs)
+            
+
+    def _parse(self, infile):
+        cluster_id = -1
+        num_fields = -1
+        species_field = 2
+        group_tag = self.grouptag
+        header = self._prefix
+        comment = _COMMENT + _SPACE
+        for line in infile:
+            line = line.lstrip().rstrip('\r\n')
+
+            if line == _EMPTY or \
+               line.startswith(comment):
+                continue
+            
+            if ((num_fields < 0) and
+                (line.startswith(header))):
+                fields = line.split(_TAB)
+                num_fields = num(fields)
+                self.species = list(map(str.strip, fields[species_field:]))
+                
+            elif num_fields < 0:
+                raise OrthogroupsFormatError("No header detected in: %s" % (
+                    getattr(infile,'name','<iobuffer>')
+                ))
+
+            elif line.startswith(group_tag):
+                cluster_id = line[len(group_tag):].strip()
+                
+            else:
+                fields = line.split(_TAB)
+                group = []
+                for i in range(species_field, num_fields):
+                    fields[i] = fields[i].strip()
+                    if num(fields[i]) > 0:
+                        group.append(tuple(map(str.strip, fields[i].split(_COMMA))))
+                    else:
+                        group.append(tuple())
+
+                self.clusters.append(cluster_id)
+                self.counts.append(int(fields[0].strip()))
+                self.ids.append(fields[1].strip())
+                self.groups.append(group)
+                
+        assert num(self.counts) == num(self.clusters) == num(self.ids) == num(self.groups), \
+            "Mismatched number of orthogroups, clusters, counts, or IDs"
+
+        self.probabilities = [-1] * num(self.groups)
+        
+        
+    def format_orthogroups_header(self, species=None, id=None):
+        if id is None:
+            id = self._prefix
+        if species is None:
+            species = self.species
+        return '%s\t%s\tPostID\tPostProb' % (id, _TAB.join(species))
+
+    
+    def format_orthogroups_record(self, id=None, cluster=None, prob=None, group=None, count=0, index=None):
+        if index is not None:
+            id = self.ids[index]
+            group = self.groups[index]
+            count = self.counts[index]
+            cluster = self.clusters[index]
+            prob = self.probabilities[index]
+            
+        return _TAB.join((
+            str(count),
+            str(id),
+            _TAB.join(map(self._join_on_comma, group)),
+            str(cluster),
+            '%g' % prob
+        ))        
+            
+    def clear(self):
+        OrthoFinderOrthogroups.clear(self)
+        self.counts = []
+        self.clusters = []
+        self.probabilities = []
