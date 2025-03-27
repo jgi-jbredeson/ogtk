@@ -7,7 +7,7 @@ import getopt
 from math import inf as _POS_INF
 from og.core.utils import index_list
 from og.core.members import map_loci_to_sequences
-from og.core.parsers.config import SpeciesConfig
+from og.core.parsers.config import SpeciesConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr as _localized
 from og.core.parsers.assembly_report import is_placed as _placed
@@ -200,7 +200,7 @@ def main(argv):
     if output_seq_names:
         if num(arguments) != 3:
             usage('--output-sequence-names requested, but no YAML file given')
-        config = SpeciesConfig(arguments[2], load_files=True)
+        config = SpeciesConfigFile(arguments[2], load_files=True, map_assigned_molecule=True)
 
         for species_id in qry_ortho.species:
             if species_id not in config.species:

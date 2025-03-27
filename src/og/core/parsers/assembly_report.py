@@ -28,6 +28,37 @@ UNIT_ALTERNATE = 0x400
 UNIT_PATCHES = 0x800
 UNIT_NONNUCLEAR = 0x1000
 
+REL_EQUAL = 0x2000
+REL_CMP = 0x4000
+
+_VALID_COLUMNS = (
+    'Sequence-Name',
+    'Sequence-Role',
+    'Assigned-Molecule',
+    'Assigned-Molecule-Location/Type',
+    'GenBank-Accn',
+    'Relationship',
+    'RefSeq-Accn',
+    'Assembly-Unit',
+    'Sequence-Length',
+    'UCSC-style-name'
+)
+_VALID_ATTRIBUTES = (
+    'sequence_name',
+    'sequence_role',
+    'assigned_molecule',
+    'assigned_type',
+    'genbank_accession',
+    'relationship',
+    'refseq_accession',
+    'assembly_unit',
+    'sequence_length',
+    'ucsc_name'
+)
+
+def NoneToNa(value):
+    return 'na' if value is None else value
+
 
 class AssemblyReportFormatError(Exception):
     pass
@@ -35,14 +66,16 @@ class AssemblyReportFormatError(Exception):
 
 class _AssemblyReportRecord(object):
     def __init__(self,
-                 sequence_name, sequence_length=-1, flags=0,
+                 sequence_name, sequence_length=-1,
                  assigned_molecule=None, assigned_type=None,
+                 assembly_unit=None, flags=0,
                  genbank_accession=None, refseq_accession=None, ucsc_name=None):
         self.sequence_name = sequence_name
         self.sequence_length = sequence_length
         self.flags = flags
         self.assigned_molecule = assigned_molecule
-        self.assigned_type = assigned_type        
+        self.assigned_type = assigned_type
+        self.assembly_unit = assembly_unit
         self.genbank_accession = genbank_accession
         self.refseq_accession = refseq_accession
         self.ucsc_name = ucsc_name
@@ -51,19 +84,49 @@ class _AssemblyReportRecord(object):
         return '%s(%s)' % (
             self.__class__.__name__,
             ', '.join([
-                attr  + '=' + str(getattr(attr, 'None')) for attr in (
-                    'sequence_name',
-                    'sequence_length',
-                    'flags',
-                    'assigned_molecule',
-                    'assigned_type',
-                    'genbank_accession',
-                    'refseq_accession',
-                    'ucsc_name'
-                )
+                '%s=%s' % (
+                    attr,
+                    str(getattr(self, attr, None))) \
+                    for attr in _VALID_ATTRIBUTES
             ])
         )
-        
+
+    def __str__(self):
+        return _TAB.join((
+            str(NoneToNa(getattr(self, attr, None))) for attr in _VALID_ATTRIBUTES
+        ))
+    
+    @property
+    def sequence_role(self):
+        if self.flags & ROLE_ASM_MOL:
+            return 'assembled-molecule'
+        elif self.flags & ROLE_UNPLC_SCAF:
+            return 'unplaced-scaffold'
+        elif self.flags & ROLE_UNPLC_CTG:
+            return 'unplaced-contig'
+        elif self.flags & ROLE_UNLOC_SCAF:
+            return 'unlocalized-scaffold'
+        elif self.flags & ROLE_UNLOC_CTG:
+            return 'unlocalized-contig'
+        elif self.flags & ROLE_ALT_SCAF:
+            return 'alt-scaffold'
+        elif self.flags & ROLE_ALT_CTG:
+            return 'alt-contig'
+        elif self.flags & ROLE_FIX_PATCH:
+            return 'fix-patch'
+        elif self.flags & ROLE_NOVEL_PATCH:
+            return 'novel-patch'
+        return None
+
+    @property
+    def relationship(self):
+        if self.flags & REL_EQUAL:
+            return '='
+        elif self.flags & REL_CMP:
+            return '<>'
+        else:
+            return None
+    
     @property
     def is_primary(self):
         return bool(self.flags & UNIT_PRIMARY)
@@ -106,10 +169,14 @@ class _AssemblyReportRecord(object):
 
     
     
-class AssemblyReport(dict):
+class AssemblyReportFile(dict):
     def __init__(self, infile=None, **kwargs):
         dict.__init__(self)
         self.filename = None
+        self.map_assigned_molecule = False
+        if 'map_assigned_molecule' in kwargs:
+            self.map_assigned_molecule = kwargs['map_assigned_molecule']
+            del(kwargs['map_assigned_molecule'])
         if infile is not None:
             self.from_file(infile, **kwargs)
             
@@ -143,11 +210,28 @@ class AssemblyReport(dict):
                         line_count, 9
                     )) from None
             
-            record = _AssemblyReportRecord(fields[0], fields[8])
+            record = _AssemblyReportRecord(
+                sequence_name=fields[0],
+                assigned_molecule=fields[2],
+                assigned_type=fields[3],
+                genbank_accession=fields[4],
+                refseq_accession=fields[6],
+                assembly_unit=fields[7],
+                sequence_length=fields[8],
+                ucsc_name=fields[9]
+            )
 
-            sequence_role = None if fields[1] is None else fields[1].lower()
-            assigned_type = None if fields[3] is None else fields[3].lower()
-            assembly_unit = None if fields[7] is None else fields[7].lower()
+            sequence_role = None \
+                if   fields[1] is None \
+                else fields[1].lower()
+            assigned_type = None \
+                if   record.assigned_type is None \
+                else record.assigned_type.lower()
+            assembly_unit = None \
+                if   record.assembly_unit is None \
+                else record.assembly_unit.lower()
+            relationship = fields[5]
+            
             if sequence_role == 'alt-scaffold':
                 record.flags |= ROLE_ALT_SCAF
                 record.flags |= UNIT_ALTERNATE
@@ -159,7 +243,8 @@ class AssemblyReport(dict):
             elif sequence_role == 'novel-patch':
                 record.flags |= ROLE_NOVEL_PATCH
             elif sequence_role == 'assembled-molecule':
-                assembled_molecules[fields[2]] = fields[0]
+                assembled_molecules[record.assigned_molecule] \
+                    = record.sequence_name
                 record.flags |= ROLE_ASM_MOL
             elif sequence_role == 'unlocalized-scaffold':
                 record.flags |= ROLE_UNLOC_SCAF
@@ -170,8 +255,8 @@ class AssemblyReport(dict):
             elif sequence_role == 'unplaced-contig':
                 record.flags |= ROLE_UNPLC_CTG
 
-            if assigned_type == 'chromosome':
-                record.assigned_molecule = fields[2]
+            # if assigned_type == 'chromosome':
+            #     record.assigned_molecule = fields[2]
                 
             if assembly_unit == 'primary assembly':
                 record.flags |= UNIT_PRIMARY
@@ -180,25 +265,30 @@ class AssemblyReport(dict):
             elif assembly_unit == 'patches':
                 record.flags |= UNIT_PATCHES
 
+            if relationship == '=':
+                record.flags |= REL_EQUAL
+            elif relationship == '<>':
+                record.flags |= REL_CMP
                 
-            if fields[4] is not None:
-                record.genbank_accession = fields[4]
-            if fields[6] is not None:
-                record.refseq_accession = fields[6]
-            if fields[9] is not None:
-                record.ucsc_name = fields[9]
+            # if fields[4] is not None:
+            #     record.genbank_accession = fields[4]
+            # if fields[6] is not None:
+            #     record.refseq_accession = fields[6]
+            # if fields[9] is not None:
+            #     record.ucsc_name = fields[9]
 
             self[record.sequence_name] = record
 
-        # Map sequence-name of assembled-molecule onto assigned-molecule field:
-        for record in self.values():
-            if record.assigned_molecule is None:
-                continue
-            elif record.assigned_molecule in assembled_molecules:
-                record.assigned_molecule \
-                    = assembled_molecules[record.assigned_molecule]
-            else:
-                raise KeyError("Assigned molecule: %s" % record.assigned_molecule)
+        # Map Sequence-Name of assembled-molecule onto Assigned-Molecule field:
+        if self.map_assigned_molecule:
+            for record in self.values():
+                if record.assigned_molecule is None:
+                    continue
+                elif record.assigned_molecule in assembled_molecules:
+                    record.assigned_molecule \
+                        = assembled_molecules[record.assigned_molecule]
+                else:
+                    raise KeyError("Assigned molecule: %s" % record.assigned_molecule)
 
                 
     def from_file(self, infile, **kwargs):

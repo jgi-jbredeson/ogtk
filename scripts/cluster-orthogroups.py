@@ -20,7 +20,7 @@ from og.core.utils import index_list
 from og.core.members import _LENIENT, _STRICT
 from og.core.members import map_loci_to_sequences
 from og.core.members import filter_unplaced_sequences
-from og.core.parsers.config import SpeciesConfig
+from og.core.parsers.config import SpeciesConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr as _localized
 from og.core.parsers.assembly_report import is_placed as _placed
@@ -294,7 +294,7 @@ def main(argv):
         usage('Unexpected number of arguments')
 
     ortho  = OrthoFinderOrthogroups(arguments[0])
-    config = SpeciesConfig(arguments[1], load_files=True)
+    config = SpeciesConfigFile(arguments[1], load_files=True, map_assigned_molecule=True)
     clust  = config.tree['ploidy']
     ofile  = sys.stdout
 

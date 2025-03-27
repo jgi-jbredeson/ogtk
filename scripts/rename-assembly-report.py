@@ -14,11 +14,23 @@ import sys
 import string
 import getopt
 
-from og.core.utils import index_list
+from og.core.parsers.assembly_report import AssemblyReportFile
+from og.core.parsers.assembly_report import (
+    _VALID_ATTRIBUTES,
+    _VALID_COLUMNS,
+    UNIT_PRIMARY,
+)
+from og.constants import (
+    _COLON,
+    _EMPTY,
+    _TAB,
+    dict
+)
 
 _ALPHA = str.maketrans({a:None for a in string.ascii_letters})
-_VALID_COLUMNS = ('Sequence-Name','Sequence-Role','Assigned-Molecule','Assigned-Molecule-Location/Type','GenBank-Accn','Relationship','RefSeq-Accn','Assembly-Unit','Sequence-Length','UCSC-style-name')
+
 _RNAME_COLUMNS = ('Sequence-Name','GenBank-Accn','RefSeq-Accn','UCSC-style-name')
+_COLUMN_ATTR_MAP = dict(zip(_VALID_COLUMNS, _VALID_ATTRIBUTES))
 
 num = len
 
@@ -30,17 +42,17 @@ class Pattern(object):
 
         
 def get_pattern(value):
-    fields = value.split(':',maxsplit=1)
+    fields = value.split(_COLON,maxsplit=1)
     if num(fields) == 2:
         if fields[0] in _VALID_COLUMNS:
             if fields[0] in _RNAME_COLUMNS:
-                return Pattern(fields[0], re.compile(fields[1]))
+                return Pattern(_COLUMN_ATTR_MAP[fields[0]], re.compile(fields[1]))
             else:
                 usage('Cannot write to column: not a name/accession field: ' + fields[0])
         else:
-            usage('Invalid column name: ' + fields[0])
+            usage('Invalid column name (case sensitive): ' + fields[0])
     else:
-        return Pattern(_RNAME_COLUMNS[0], re.compile(value))
+        return Pattern(_COLUMN_ATTR_MAP[_RNAME_COLUMNS[0]], re.compile(value))
 
 
 def get_subgroup(pattern, field):
@@ -65,7 +77,7 @@ def format_number(field, width=0):
         return field
 
     
-def format_id(fields, column_indices, count_dict, regexp=None, zwidth=0):
+def _format_id(fields, column_indices, count_dict, regexp=None, zwidth=0):
     if regexp is None:
         if fields[2] in count_dict:
             count_dict[fields[2]] += 1
@@ -78,11 +90,25 @@ def format_id(fields, column_indices, count_dict, regexp=None, zwidth=0):
             fields[column_indices[regexp.column]]
         )
     return format_number(label, zwidth)
-            
+
+
+def format_id(record, count_dict, regexp=None, zwidth=0):
+    if regexp is None:
+        if record.assigned_molecule in count_dict:
+            count_dict[record.assigned_molecule] += 1
+        else:
+            count_dict[record.assigned_molecule] = 1
+        label = str(count_dict[record.assigned_molecule])
+    else:
+        label = get_subgroup(
+            regexp.pattern,
+            getattr(record, regexp.column)
+        )
+    return format_number(label, zwidth)
     
     
 def usage(message=None, exitcode=1, stream=sys.stderr):
-    message = '' if message is None else 'ERROR: %s\n\n' % message
+    message = _EMPTY if message is None else 'ERROR: %s\n\n' % message
     stream.write("\n")
     stream.write("Program: %s (%s)\n" % (__program__, __purpose__))
     stream.write("Version: %s %s\n" % (__pkgname__, __version__))
@@ -188,8 +214,7 @@ def main(argv):
     if num(arguments) != 2:
         usage('Unexpected number of arguments')
         
-            
-    assembly_report = open(arguments[0], 'r')
+    assembly_report = AssemblyReportFile(arguments[0])
     assembly_prefix = arguments[1]
 
     alt_count = dict()
@@ -197,171 +222,138 @@ def main(argv):
     novel_count = dict()
     unplaced_count = 0
     unlocalized_count = dict()
-    column_indices = None
-    for line in assembly_report:
-        line   = line.strip()
-        fields = line.split('\t')
-        
-        if line.startswith('#'):
-            if line.startswith('# %s' % _VALID_COLUMNS[0]):
-                fields[0] = fields[0].lstrip('#').strip()
-                column_indices = index_list(fields)
-            print(line)
-            continue
-        elif column_indices is None:
-            print('# %s' % '\t'.join(_VALID_COLUMNS))
-            column_indices = index_list(_VALID_COLUMNS)
+    print('# ' + _TAB.join(_VALID_COLUMNS))
+    
+    for record in assembly_report.values():
+        if record.is_primary:
+            if record.assigned_type == 'Chromosome':
+                if record.is_assembled_molecule:
+                    record.sequence_name \
+                        = assembly_prefix \
+                        + format_number(
+                            record.assigned_molecule,
+                            chr_zero_pad_width
+                        )
 
-        if fields[7].lower() == 'primary assembly':
-            if fields[3].lower() == 'chromosome':
-                if fields[1] == 'assembled-molecule':
-                    fields[0] = assembly_prefix + format_number(fields[2], chr_zero_pad_width)
-                
-                elif fields[1] == 'unlocalized-scaffold':
-                    fields[0] = '%s%s.Un%s' % (
+                elif record.is_unlocalized:
+                    record.sequence_name = '%s%s.Un%s' % (
                         assembly_prefix,
-                        format_number(fields[2], chr_zero_pad_width),
+                        format_number(
+                            record.assigned_molecule,
+                            chr_zero_pad_width
+                        ),
                         format_id(
-                            fields,
-                            column_indices,
+                            record,
                             unlocalized_count,
                             unlocalized_scaffold_regexp,
                             sca_zero_pad_width
                         )
                     )
                 else:
-                    raise NotImplementedError('%s:%s:%s' % (fields[7],fields[1],fields[0]))
-                
-            elif fields[1] == 'unplaced-scaffold':
+                    raise NotImplementedError('%s:%s:%s' % (
+                        record.assigned_type,
+                        record.sequence_role,
+                        record.sequence_name
+                    ))
+            
+            elif record.is_unplaced:
                 if unplaced_scaffold_regexp:
-                    fields[0] = get_subgroup(
+                    record.sequence_name = get_subgroup(
                         unplaced_scaffold_regexp.pattern,
-                        fields[column_indices[unplaced_scaffold_regexp.column]]
+                        getattr(record, unplaced_scaffold_regexp.column)
                     )
-                    fields[0] = '%sUn%s' % (
+                    record.sequence_name = '%sUn%s' % (
                         assembly_prefix,
-                        format_number(fields[0], sca_zero_pad_width)
+                        format_number(
+                            record.sequence_name,
+                            sca_zero_pad_width
+                        )
                     )
                 else:
                     unplaced_count += 1
-                    fields[0] = '%sUn%s' % (
+                    record.sequence_name = '%sUn%s' % (
                         assembly_prefix,
-                        format_number(str(unplaced_count), sca_zero_pad_width)
+                        format_number(
+                            str(unplaced_count),
+                            sca_zero_pad_width
+                        )
                     )
-
             else:
-                raise NotImplementedError('%s:%s:%s' % (fields[7],fields[1],fields[0]))
+                raise NotImplementedError('%s:%s:%s' % (
+                    record.assigned_type,
+                    record.sequence_role,
+                    record.sequence_name
+                ))
 
-        elif fields[7] == 'non-nuclear':
-            if fields[1] == 'assembled-molecule':
-                molecule = fields[3].lower()
+
+        elif record.is_nonnuclear:
+            if record.is_assembled_molecule:
+                molecule = record.assigned_type
                 if molecule == 'chloroplast':
-                    # field[2] is 'Pltd', not specific enough.
-                    fields[0] = assembly_prefix + 'CP'
+                    # Assigned-Molecule is 'Pltd', not specific enough.
+                    record.sequence_name = assembly_prefix + 'CP'
                 else:
                     # Plastid
                     # Mitochondrion
                     # Mitochondrial Plasmid
-                    fields[0] = assembly_prefix + fields[2]
+                    record.sequence_name = assembly_prefix + record.assigned_molecule
             else:
-                raise NotImplementedError('%s:%s:%s' % (fields[7],fields[1],fields[0]))               
+                raise NotImplementedError('%s:%s:%s' % (
+                    record.assigned_type,
+                    record.sequence_role,
+                    record.sequence_name
+                ))
             
-        else:  # not 'Primary Assembly'
-            if fields[3].lower() == 'chromosome':            
-                if fields[1] == 'alt-scaffold':
-                    fields[0] = '%s%s.Alt%s' % (
+        else:  # Assembly-Unit not 'Primary Assembly'
+            if record.assigned_type == 'Chromosome':
+                if record.is_alternate:
+                    record.sequence_name = '%s%s.Alt%s' % (
                         assembly_prefix,
-                        format_number(fields[2], chr_zero_pad_width),
+                        format_number(
+                            record.assigned_molecule,
+                            chr_zero_pad_width
+                        ),
                         format_id(
-                            fields,
-                            column_indices,
+                            record,
                             alt_count,
                             alt_scaffold_regexp,
                             sca_zero_pad_width
                         )
                     )
-                    # fields[0] = assembly_prefix + format_number(fields[2], chr_zero_pad_width)
-
-                    # if alt_scaffold_regexp:
-                    #     label = get_subgroup(
-                    #         alt_scaffold_regexp.pattern,
-                    #         fields[column_indices[alt_scaffold_regexp.column]]
-                    #     )
-                    # else:
-                    #     if fields[2] in alt_count:
-                    #         alt_count[fields[2]] += 1
-                    #     else:
-                    #         alt_count[fields[2]] = 1
-                    #     label = str(alt_count[fields[2]])
-
-                    # fields[0] += '.Alt%s' % (
-                    #     format_number(label, sca_zero_pad_width),
-                    # )
-                elif fields[1] == 'novel-patch':
-                    fields[0] = '%s%s.NP%s' % (
+                elif record.is_patch:
+                    patch_type = \
+                        'NP' if record.sequence_role == 'novel-patch' else \
+                        'FP' if record.sequence_role == 'fix-patch' else \
+                        'OP' # other-patch?
+                        
+                    record.sequence_name = '%s%s.%s%s' % (
                         assembly_prefix,
-                        format_number(fields[2], chr_zero_pad_width),
+                        format_number(
+                            record.assigned_molecule,
+                            chr_zero_pad_width
+                        ),
+                        patch_type,
                         format_id(
-                            fields,
-                            column_indices,
+                            record,
                             novel_count,
                             novel_patch_regexp,
                             sca_zero_pad_width
                         )
                     )
-                    # fields[0] = assembly_prefix + format_number(fields[2], chr_zero_pad_width)
-
-                    # if novel_patch_regexp:
-                    #     label = get_subgroup(
-                    #         novel_patch_regexp.pattern,
-                    #         fields[column_indices[novel_patch_regexp.column]]
-                    #     )
-                    # else:
-                    #     if fields[2] in novel_count:
-                    #         novel_count[fields[2]] += 1
-                    #     else:
-                    #         novel_count[fields[2]] = 1
-                    #     label = str(novel_count[fields[2]])
-                        
-                    # fields[0] += '.NP%s' % (
-                    #     format_number(label, sca_zero_pad_width),
-                    # )
-                elif fields[1] == 'fix-patch':
-                    fields[0] = '%s%s.FP%s' % (
-                        assembly_prefix,
-                        format_number(fields[2], chr_zero_pad_width),
-                        format_id(
-                            fields,
-                            column_indices,
-                            fix_count,
-                            fix_patch_regexp,
-                            sca_zero_pad_width
-                        )
-                    )
-                    
-                    # fields[0] = assembly_prefix + format_number(fields[2], chr_zero_pad_width)
-
-                    # if fix_patch_regexp:
-                    #     label = get_subgroup(
-                    #         fix_patch_regexp.pattern,
-                    #         fields[column_indices[fix_patch_regexp.column]]
-                    #     )
-                    # else:
-                    #     if fields[2] in fix_count:
-                    #         fix_count[fields[2]] += 1
-                    #     else:
-                    #         fix_count[fields[2]] = 1
-                    #     label = str(fix_count[fields[2]])
-                        
-                    # fields[0] += '.FP%s' % (
-                    #     format_number(label, sca_zero_pad_width),
-                    # )
                 else:
-                    raise NotImplementedError('%s:%s:%s' % (fields[7],fields[1],fields[0]))
+                    raise NotImplementedError('%s:%s:%s' % (
+                        record.assigned_type,
+                        record.sequence_role,
+                        record.sequence_name
+                    ))
             else:
-                raise NotImplementedError('%s:%s:%s' % (fields[7],fields[1],fields[0])) 
+                raise NotImplementedError('%s:%s:%s' % (
+                    record.assigned_type,
+                    record.sequence_role,
+                    record.sequence_name
+                ))
 
-        print('\t'.join(fields))
+        print(str(record))
 
 
 if __name__ == '__main__':

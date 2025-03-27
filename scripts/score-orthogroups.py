@@ -18,7 +18,7 @@ import getopt
 
 from og.core.io import is_stream, open
 from og.core.members import _LENIENT, _STRICT
-from og.core.parsers.config import SpeciesConfig
+from og.core.parsers.config import SpeciesConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.orthogroups import CountedClusteredOrthogroups
 from og.core.parsers.assembly_report import is_chr as _localized
@@ -349,7 +349,7 @@ def main(argv):
         
     orthoM = CountedClusteredOrthogroups(arguments[0])
     orthoU = open_inferred_format(arguments[1])
-    config = SpeciesConfig(arguments[2], load_files=True)
+    config = SpeciesConfigFile(arguments[2], load_files=True, map_assigned_molecule=True)
     
     pprobs = calc_conditional_prob(orthoU, orthoM, config, is_placed, ignore_unplaced)
 
