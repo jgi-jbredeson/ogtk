@@ -1,7 +1,7 @@
 
 import yaml
 from math import inf as _POS_INF
-from og.core.parsers.bed import BEDNameMap
+from og.core.parsers.bed import BEDNameMapFile
 from og.core.parsers.newick import IntervalNewickTree
 from og.core.parsers.assembly_report import AssemblyReportFile
 from og.constants import _PYTHON_VERSION
@@ -92,7 +92,9 @@ class SpeciesConfigFile(object):
     def load_files(self):
         for species in self.species:
             if isinstance(self.species[species].loci, (str, bytes)):
-                self.species[species].loci = BEDNameMap(self.species[species].loci)
+                self.species[species].loci = BEDNameMapFile(
+                    self.species[species].loci
+                )
             if isinstance(self.species[species].references, (str, bytes)):
                 self.species[species].references = AssemblyReportFile(
                     self.species[species].references,

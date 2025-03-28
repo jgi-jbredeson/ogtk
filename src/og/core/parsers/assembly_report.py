@@ -1,15 +1,14 @@
 
+import sys
 from og.constants import (
-    _PYTHON_VERSION,
     _COMMENT,
-    _TAB
+    _SPACE,
+    _EOL,
+    _TAB,
+    dict
 )
 from og.core.io import open, is_stream
 
-
-if _PYTHON_VERSION < (3,7):
-    from collections import OrderedDict as dict
-    
 
 num = len
 
@@ -290,7 +289,11 @@ class AssemblyReportFile(dict):
                 else:
                     raise KeyError("Assigned molecule: %s" % record.assigned_molecule)
 
-                
+
+    def _format_header(self):
+        return _COMMENT + _SPACE + _TAB.join(_VALID_COLUMNS)
+
+    
     def from_file(self, infile, **kwargs):
         self.clear()
         if is_stream(infile):
@@ -310,7 +313,30 @@ class AssemblyReportFile(dict):
             with open(infile, **kwargs) as fd:
                 self._parse(fd)
 
+                
+    def to_file(self, file=sys.stdout, **kwargs):
+        if is_stream(file):
+            stream = file
+            close = False
+        else:
+            if 'mode' in kwargs:
+                if 'r' in kwargs['mode']:
+                    raise ValueError("%s.to_file() is write-only" % (
+                        self.__class__.__name__
+                    ))
+            else:
+                kwargs['mode'] = 'w'
+                stream = open(file, **kwargs)
+                close = True
 
+        stream.write(self._format_header() + _EOL)
+        for record in self.values():
+            stream.write(str(record) + _EOL)
+
+        if close:
+            stream.close()
+
+                
     def from_string(self, instring):
         import io
         self.clear()

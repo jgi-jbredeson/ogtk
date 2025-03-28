@@ -19,6 +19,7 @@ class OrthogroupsFormatError(Exception):
     pass
 
 
+
 class Orthogroups(object):
     def __init__(self):
         self.clear()
@@ -42,24 +43,25 @@ class Orthogroups(object):
         raise NotImplementedError('format_orthogroups_record()')
 
     
-    def to_table(self, infile=sys.stdout, **kwargs):
-        if is_stream(infile):
-            stream = infile
+    def to_file(self, file=sys.stdout, **kwargs):
+        if is_stream(file):
+            stream = file
             close = False
         else:
             if 'mode' in kwargs:
                 if 'r' in kwargs['mode']:
-                    raise ValueError("%s.to_table() is write-only" % (
+                    raise ValueError("%s.to_file() is write-only" % (
                         self.__class__.__name__
                     ))
             else:
                 kwargs['mode'] = 'w'
-                stream = open(infile, **kwargs)
+                stream = open(file, **kwargs)
                 close = True
 
         stream.write(self.format_orthogroups_header() + _EOL)
         for i in range(num(self.groups)):
             stream.write(self.format_orthogroups_record(index=i) + _EOL)
+
         if close:
             stream.close()
 
@@ -78,7 +80,9 @@ class Orthogroups(object):
         self.clusters = self.ids
         self.groups = []
         
+    to_table = to_file
 
+    
 
 class OrthoFinderOrthogroups(Orthogroups):
     def __init__(self, infile=None, **kwargs):
@@ -184,6 +188,7 @@ class OrthoFinderOrthogroups(Orthogroups):
         self.filename = None
         self.is_hog = False
 
+        
 
 class ClusteredOrthogroups(OrthoFinderOrthogroups):
     def __init__(self, infile=None, **kwargs):

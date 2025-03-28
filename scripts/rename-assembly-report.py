@@ -222,8 +222,6 @@ def main(argv):
     novel_count = dict()
     unplaced_count = 0
     unlocalized_count = dict()
-    print('# ' + _TAB.join(_VALID_COLUMNS))
-    
     for record in assembly_report.values():
         if record.is_primary:
             if record.assigned_type == 'Chromosome':
@@ -353,7 +351,7 @@ def main(argv):
                     record.sequence_name
                 ))
 
-        print(str(record))
+    assembly_report.to_file()
 
 
 if __name__ == '__main__':
