@@ -65,6 +65,6 @@ else:
 
 _dummy = dict
 if _PYTHON_VERSION < (3,7):
-    dict = collections.OrderedDict
+    from collections import OrderedDict as dict
 else:
     dict = _dummy

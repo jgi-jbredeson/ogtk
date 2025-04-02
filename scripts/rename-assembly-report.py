@@ -23,6 +23,7 @@ from og.core.parsers.assembly_report import (
 from og.constants import (
     _COLON,
     _EMPTY,
+    _SPACE,
     _TAB,
     dict
 )
@@ -56,6 +57,8 @@ def get_pattern(value):
 
 
 def get_subgroup(pattern, field):
+    if field is None:
+        return 
     match = pattern.search(field)
     if match:
         for group in match.groups():
@@ -76,21 +79,6 @@ def format_number(field, width=0):
     else:
         return field
 
-    
-def _format_id(fields, column_indices, count_dict, regexp=None, zwidth=0):
-    if regexp is None:
-        if fields[2] in count_dict:
-            count_dict[fields[2]] += 1
-        else:
-            count_dict[fields[2]] = 1
-        label = str(count_dict[fields[2]])
-    else:
-        label = get_subgroup(
-            regexp.pattern,
-            fields[column_indices[regexp.column]]
-        )
-    return format_number(label, zwidth)
-
 
 def format_id(record, count_dict, regexp=None, zwidth=0):
     if regexp is None:
@@ -99,6 +87,10 @@ def format_id(record, count_dict, regexp=None, zwidth=0):
         else:
             count_dict[record.assigned_molecule] = 1
         label = str(count_dict[record.assigned_molecule])
+    elif getattr(record, regexp.column) is None:
+        raise ValueError("Cannot format an 'na': [%s]" % (
+            str(record).replace(_TAB,_SPACE)
+        ))
     else:
         label = get_subgroup(
             regexp.pattern,
