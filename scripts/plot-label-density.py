@@ -327,10 +327,7 @@ def get_colors(locus_map, file=None):
 
 
 def get_bin_freqs(chr_loci, bin_width=10, bin_shift=10,
-                  label_colors=None, label_index=None, adaptive_binning=False):
-    if label_index is None:
-        label_index = index_list(label_colors)
-
+                  label_index=None, adaptive_binning=False):
     if adaptive_binning:
         blocks = get_blocks(chr_loci['label'], label_index, bin_width, bin_shift=1)
     else:
@@ -361,7 +358,7 @@ def get_bin_freqs(chr_loci, bin_width=10, bin_shift=10,
     assert num(bin_freq) == num(bin_begs) == num(bin_ends), \
         'Mismatched number of frequencies and bin positions'
     
-    chr_freq = bin_freq.transpose()
+    chr_freq = bin_freq  #.transpose()
     chr_begs = numpy.zeros(num(bin_begs), dtype=numpy.int64)
     chr_ends = numpy.zeros(num(bin_ends), dtype=numpy.int64)
     for i in range(num(bin_ends)):
@@ -372,20 +369,11 @@ def get_bin_freqs(chr_loci, bin_width=10, bin_shift=10,
 
 
 
-def plot_chr_freqs(axes, chr_loci, bin_width=10, bin_shift=10,
-                   label_colors=None, label_index=None, adaptive_binning=False):
+def plot_chr_freqs(axes, chr_freq, chr_begs, chr_ends, label_colors=None, label_index=None):
     if label_index is None:
         label_index = index_list(label_colors)
 
-    chr_freq, chr_begs, chr_ends = \
-        get_bin_freqs(
-            chr_loci,
-            bin_width=bin_width,
-            bin_shift=bin_width,
-            label_colors=label_colors,
-            adaptive_binning=adaptive_binning
-        )
-
+    chr_freq = chr_freq.transpose()
     bottom = numpy.zeros(num(chr_ends))
     for label in label_index:
         axes.bar(
@@ -399,7 +387,28 @@ def plot_chr_freqs(axes, chr_loci, bin_width=10, bin_shift=10,
         bottom += chr_freq[label_index[label],:]
 
 
-    
+
+def write_chr_freqs(chr_name, chr_begs, chr_ends, chr_freq, label_index=None, file=sys.stdout):
+    with open(file, 'wt') as freqs_file:
+        print(
+            "CHROM\tSTART\tEND\t%s" % (
+                '\t'.join(sorted(label_index, key=label_index.get))
+            ),
+            file=freqs_file
+        )
+        for locus in range(len(chr_begs)):
+            print(
+                "%s\t%d\t%d\t%s" % (
+                    chr_name[locus],
+                    chr_begs[locus],
+                    chr_ends[locus],
+                    '\t'.join(map(str, chr_freq[locus,:]))
+                ),
+                file=freqs_file
+            )
+
+
+            
 def usage(message=None, exitcode=1, stream=sys.stderr):
     message = '' if message is None else 'ERROR: %s\n\n' % message
     stream.write("\n")
@@ -427,10 +436,13 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Output plot in coordinate system. Enumerative: {genomic,ordinal}\n")
     stream.write("     (default: genomic)\n")
     stream.write("\n")
+    stream.write("  -f,--output-frequencies-file <str>\n")
+    stream.write("     Output the coordinates and gene counts of each label for bin.\n")
+    stream.write("\n")
     stream.write("  -l,--output-color-legend <str>\n")
     stream.write("     Output the label-to-color map to two files with the specified\n")
     stream.write("     file prefix. This option outputs both a tab-separated text file\n")
-    stream.write("     and an image file of the legend in the format designated.\n")
+    stream.write("     and an image file of the legend in the format designated by -O.\n")
     stream.write("\n")
     stream.write("  -O,--output-type <str>\n")
     stream.write("     Output plot image to file in the specified file format.\n")
@@ -462,7 +474,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 
 
 def main(argv):
-    short_options = 'hAC:c:O:o:w:l:x:'
+    short_options = 'hAC:c:f:O:o:w:l:x:'
     long_options = (
         'help',
         'adaptive-binning',
@@ -473,6 +485,7 @@ def main(argv):
         'output-file=',
         'output-type=',
         'output-color-legend=',
+        'output-frequencies-file='
     )
     try:
         options, arguments = getopt.getopt(argv, short_options, long_options)
@@ -486,6 +499,7 @@ def main(argv):
     adaptive_binning = False
     input_color_legend_name = None
     output_color_legend_name = None
+    output_freq_file_name = None
     centromere_bed = None
     centromere_bed_name = None
     coordinate_system = _valid_coordinate_systems[0]
@@ -500,6 +514,8 @@ def main(argv):
             input_color_legend_name = value
         elif flag in ('-c','--coordinate-system'):
             coordinate_system = value
+        elif flag in ('-f','--output-frequencies-file'):
+            output_freq_file_name = value
         elif flag in ('-l','--output-color-legend'):
             output_color_legend_name = value
         elif flag in ('-O','--output-type'):
@@ -547,7 +563,8 @@ def main(argv):
     labeled_loci = sort_bed(labeled_loci, chr_offset)
 
     label_colors = get_colors(locus_map, file=input_color_legend_name)
-        
+    label_index = index_list(label_colors)
+    
     #TODO: need to check that there is a color for every label and assign if not.
         
     max_size = max(chr_size.values())
@@ -557,19 +574,42 @@ def main(argv):
     fig, ax = plotter.subplots(num_chr, figsize=(8, num_chr))
     plotter.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0)
 
+    genome_chrs = []
+    genome_begs = []
+    genome_ends = []
+    genome_freq = None
     for chr_index, chr_name in enumerate(locus_bed['chr'].unique()):
         chr_loci = labeled_loci[labeled_loci['chr'] == chr_name]
         cen_loci = get_centromeres(centromere_bed, chr_name)
 
-        if num(chr_loci):    
+        if num(chr_loci):
+            chr_freq, chr_begs, chr_ends = \
+                get_bin_freqs(
+                    chr_loci,
+                    bin_width=bin_width,
+                    bin_shift=bin_width,
+                    label_index=label_index,
+                    adaptive_binning=adaptive_binning
+                )
+
             plot_chr_freqs(
                 ax[chr_index],
-                chr_loci,
-                bin_width=bin_width,
-                bin_shift=bin_width,
+                chr_freq,
+                chr_begs,
+                chr_ends,
                 label_colors=label_colors,
-                adaptive_binning=adaptive_binning
+                label_index=label_index
             )
+            if output_freq_file_name:
+                genome_chrs.extend([chr_name] * len(chr_begs))
+                genome_begs.extend(chr_begs)
+                genome_ends.extend(chr_ends)
+                if genome_freq is None:
+                    genome_freq = chr_freq
+                else:
+                    genome_freq = numpy.vstack((genome_freq, chr_freq))
+
+            
             
         plot_chr_glyph(
             ax[chr_index],
@@ -585,6 +625,16 @@ def main(argv):
             xlab=(chr_index == max_index)
         )
 
+    if output_freq_file_name:
+        write_chr_freqs(
+            genome_chrs,
+            genome_begs,
+            genome_ends,
+            genome_freq,
+            label_index=label_index,
+            file=output_freq_file_name
+        )
+        
     fig.tight_layout()     
     plotter.savefig(output_file, format=output_type)
 
