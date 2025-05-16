@@ -14,7 +14,7 @@ import sys
 import getopt
 
 from math import inf as _POS_INF
-from og.core.io import is_stream
+from og.core.compression import is_stream
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.constants import (
     _COMMENT,

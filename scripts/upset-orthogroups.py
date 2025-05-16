@@ -13,11 +13,11 @@ __purpose__ = 'Filter OrthoFinder Orthogroups.tsv file'
 import sys
 import getopt
 
-from og.core.io import open, STDIO
 from og.core.utils import count_items
 from og.core.members import _LENIENT, _STRICT
 from og.core.members import map_loci_to_sequences
 from og.core.members import filter_unplaced_sequences
+from og.core.compression import open, STDIO
 from og.core.parsers.config import SpeciesConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr as _localized

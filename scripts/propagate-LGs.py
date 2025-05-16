@@ -3,7 +3,7 @@
 import os
 import sys
 
-from og.core.io import open
+from og.core.compression import open
 
 def fill_missing_cns(groups, letters=[]):
     if len(letters) < 1:

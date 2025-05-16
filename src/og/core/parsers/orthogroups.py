@@ -9,7 +9,7 @@ from og.constants import (
     _TAB,
     range
 )
-from og.core.io import open, is_stream
+from og.core.compression import open, is_stream
 
 num = len
 _CS = _COMMA + _SPACE

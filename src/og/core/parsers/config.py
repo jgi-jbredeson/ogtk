@@ -1,14 +1,12 @@
 
 import yaml
+
 from math import inf as _POS_INF
 from og.core.parsers.bed import BEDNameMapFile
 from og.core.parsers.newick import IntervalNewickTree
 from og.core.parsers.assembly_report import AssemblyReportFile
-from og.constants import _PYTHON_VERSION
-from og.core.io import open, is_stream
-
-if _PYTHON_VERSION < (3,7):
-    from collections import OrderedDict as dict
+from og.constants import _PYTHON_VERSION, dict
+from og.core.compression import open, is_stream
 
 _NEG_INF = -1.0 * _POS_INF
     

@@ -16,8 +16,8 @@ import io
 import sys
 import getopt
 
-from og.core.io import is_stream, open
 from og.core.members import _LENIENT, _STRICT
+from og.core.compression import is_stream, open
 from og.core.parsers.config import SpeciesConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.orthogroups import CountedClusteredOrthogroups

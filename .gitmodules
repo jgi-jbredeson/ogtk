@@ -1,0 +1,3 @@
+[submodule "submodules/compression"]
+	path = submodules/compression
+	url = https://github.com/bredeson/compression.git

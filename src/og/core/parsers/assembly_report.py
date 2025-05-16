@@ -7,7 +7,7 @@ from og.constants import (
     _TAB,
     dict
 )
-from og.core.io import open, is_stream
+from og.core.compression import open, is_stream
 
 
 num = len

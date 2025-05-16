@@ -1,4 +1,4 @@
-from og.core.io import open
+
 from og.constants import (
     _COMMENT,
     _EMPTY,
@@ -6,6 +6,7 @@ from og.constants import (
     _TAB,
     dict
 )
+from og.core.compression import open
 
 num = len
 

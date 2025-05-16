@@ -15,11 +15,11 @@ import re
 import getopt
 
 from math import inf as _POS_INF
-from og.core.io import is_stream
 from og.core.utils import index_list
 from og.core.members import _LENIENT, _STRICT
 from og.core.members import map_loci_to_sequences
 from og.core.members import filter_unplaced_sequences
+from og.core.compression import is_stream
 from og.core.parsers.config import SpeciesConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr as _localized

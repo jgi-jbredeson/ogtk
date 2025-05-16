@@ -4,9 +4,9 @@ import os
 import sys
 
 from getopt import getopt, GetoptError
-#from fastx.utils.io import load_listfile    
-from og.core.io import is_stream
+#from fastx.utils.io import load_listfile
 from og.core.utils import index_list
+from og.core.compression import is_stream
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.constants import (
     _COMMA,

@@ -4,6 +4,7 @@ PREFIX     := /usr/local
 SRC_DIR    := src
 BUILD_DIR  := build
 SCRIPT_DIR := scripts
+SUB_DIR    := submodules
 BIN_DIR    := $(BUILD_DIR)/bin
 LIB_DIR    := $(BUILD_DIR)/lib
 
@@ -14,9 +15,12 @@ MKDIR      := $(filter /%,$(shell /bin/sh -c 'type mkdir'))
 AWK        := $(filter /%,$(shell /bin/sh -c 'type awk'))
 CAT        := $(filter /%,$(shell /bin/sh -c 'type cat'))
 SED        := $(filter /%,$(shell /bin/sh -c 'type sed'))
-GIT        := $(filter /%,$(shell /bin/sh -c 'type git'))
 CP         := $(filter /%,$(shell /bin/sh -c 'type cp'))
 RM         := $(filter /%,$(shell /bin/sh -c 'type rm'))
+GIT        := $(filter /%,$(shell /bin/sh -c 'type git'))
+
+GIT_SUBUPDATE = $(GIT) submodule update --init --recursive
+GIT_CHECKOUT  = $(GIT) checkout
 
 CP_R        = $(CP) -R
 RM_R        = $(RM) -r
@@ -57,10 +61,6 @@ LIB_TARGETS = \
 	$(LIB_DIR)/og/__init__.py \
 	$(LIB_DIR)/og/constants.py \
 	$(LIB_DIR)/og/core/members.py \
-	$(LIB_DIR)/og/core/io/__init__.py \
-	$(LIB_DIR)/og/core/io/constants.py \
-	$(LIB_DIR)/og/core/io/bgzip.py \
-	$(LIB_DIR)/og/core/io/filenames.py \
 	$(LIB_DIR)/og/core/parsers/assembly_report.py \
 	$(LIB_DIR)/og/core/parsers/newick.py \
 	$(LIB_DIR)/og/core/parsers/orthogroups.py \
@@ -69,6 +69,9 @@ LIB_TARGETS = \
 	$(LIB_DIR)/og/core/parsers/tsv.py \
 	$(LIB_DIR)/og/core/trees.py \
 	$(LIB_DIR)/og/core/utils.py
+
+SUB_TARGETS = \
+	$(LIB_DIR)/og/core/compression
 
 
 .SUFFIXES: .py .sh .R
@@ -100,8 +103,14 @@ $(LIB_DIR)/%: $(SRC_DIR)/%
 	@$(AWK) 'BEGIN{print "#!/usr/bin/env python3"} {print "#",$$_}' $(LICENSE) | $(CAT) - $< | \
 		$(SED) "s/__PACKAGE_NAME__/$(PACKAGE)/;s/__PACKAGE_VERSION__/$(VERSION)/;s/__PACKAGE_CONTACT__/$(CONTACT)/" >$@
 
+$(LIB_DIR)/og/core/%: $(SUB_DIR)/%
+	@$(CP_R) $(SUB_DIR)/$*/src/$* $(LIB_DIR)/og/core
 
-build: $(LIB_DIR) $(LIB_TARGETS) $(BIN_DIR) $(BIN_TARGETS)
+$(SUB_DIR)/%:
+	$(GIT_SUBUPDATE) $<
+
+
+build: $(LIB_DIR) $(LIB_TARGETS) $(SUB_TARGETS) $(BIN_DIR) $(BIN_TARGETS)
 
 
 activate:

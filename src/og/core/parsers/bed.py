@@ -8,7 +8,7 @@ from og.constants import (
     _EOL,
     _TAB
 )
-from og.core.io import open, is_stream
+from og.core.compression import open, is_stream
 
 
 if _PYTHON_VERSION < (3,7):
