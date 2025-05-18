@@ -103,12 +103,11 @@ $(LIB_DIR)/%: $(SRC_DIR)/%
 	@$(AWK) 'BEGIN{print "#!/usr/bin/env python3"} {print "#",$$_}' $(LICENSE) | $(CAT) - $< | \
 		$(SED) "s/__PACKAGE_NAME__/$(PACKAGE)/;s/__PACKAGE_VERSION__/$(VERSION)/;s/__PACKAGE_CONTACT__/$(CONTACT)/" >$@
 
-$(LIB_DIR)/og/core/%: $(SUB_DIR)/%
+$(LIB_DIR)/og/core/%: $(SUB_DIR)/%/src/%
 	@$(CP_R) $(SUB_DIR)/$*/src/$* $(LIB_DIR)/og/core
 
-$(SUB_DIR)/%:
+$(SUB_DIR)/%/src/%:
 	$(GIT_SUBUPDATE) $<
-
 
 build: $(LIB_DIR) $(LIB_TARGETS) $(SUB_TARGETS) $(BIN_DIR) $(BIN_TARGETS)
 
