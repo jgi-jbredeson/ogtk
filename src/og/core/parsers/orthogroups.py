@@ -86,7 +86,7 @@ class Orthogroups(object):
 
 class OrthoFinderOrthogroups(Orthogroups):
     def __init__(self, infile=None, **kwargs):
-        Orthogroups.__init__(self)
+        super().__init__()
         self._prefix = 'Orthogroup'
         self.is_hog = False
         self.filename = None
@@ -184,7 +184,7 @@ class OrthoFinderOrthogroups(Orthogroups):
 
         
     def clear(self):
-        Orthogroups.clear(self)
+        super().clear()
         self.filename = None
         self.is_hog = False
 
@@ -192,7 +192,7 @@ class OrthoFinderOrthogroups(Orthogroups):
 
 class ClusteredOrthogroups(OrthoFinderOrthogroups):
     def __init__(self, infile=None, **kwargs):
-        OrthoFinderOrthogroups.__init__(self)
+        super().__init__()
         self._prefix = 'Cluster\tOrthogroup'
         self.clusters = []
         if infile is not None:
@@ -254,14 +254,14 @@ class ClusteredOrthogroups(OrthoFinderOrthogroups):
         ))
             
     def clear(self):
-        OrthoFinderOrthogroups.clear(self)
+        super().clear()
         self.clusters = []
 
         
         
 class CountedClusteredOrthogroups(OrthoFinderOrthogroups):
     def __init__(self, infile=None, grouptag='##group=', **kwargs):
-        OrthoFinderOrthogroups.__init__(self)
+        super().__init__()
         self._prefix = 'Count\tCluster'
         self.grouptag = grouptag
         self.counts = []
@@ -345,7 +345,101 @@ class CountedClusteredOrthogroups(OrthoFinderOrthogroups):
         ))        
             
     def clear(self):
-        OrthoFinderOrthogroups.clear(self)
+        super().clear()
         self.counts = []
         self.clusters = []
         self.probabilities = []
+
+
+        
+class ClusterErrorOrthogroups(CountedClusteredOrthogroups):
+    def __init__(self, infile=None, grouptag='##group=', **kwargs):
+        super().__init__()
+        self._prefix = 'Count\tCluster'
+        self.grouptag = grouptag
+        self.counts = []
+        self.clusters = []
+        self.probabilities = []
+        self.postclusters = []
+        if infile is not None:
+            self.from_file(infile, **kwargs)
+
+        
+    def _parse(self, infile):
+        old_cluster_id = -1
+        num_fields = -1
+        species_field = 2
+        group_tag = self.grouptag
+        header = self._prefix
+        comment = _COMMENT + _SPACE
+        
+        for line in infile:
+            line = line.lstrip().rstrip('\r\n')
+
+            if line == _EMPTY or \
+               line.startswith(comment):
+                continue
+            
+            if ((num_fields < 0) and
+                (line.startswith(header))):
+                fields = line.split(_TAB)
+                num_fields = num(fields)
+                self.species = list(map(str.strip, fields[species_field:]))
+                
+            elif num_fields < 0:
+                raise OrthogroupsFormatError("No header detected in: %s" % (
+                    getattr(infile,'name','<iobuffer>')
+                ))
+
+            elif line.startswith(group_tag):
+                old_cluster_id = line[len(group_tag):].strip()
+                
+            else:
+                fields = line.split(_TAB)
+                group = []
+                for i in range(species_field, num_fields-4):
+                    fields[i] = fields[i].strip()
+                    if num(fields[i]) > 0:
+                        group.append(tuple(map(str.strip, fields[i].split(_COMMA))))
+                    else:
+                        group.append(tuple())
+
+                old_cluster_id = fields[-4]
+                new_cluster_id = fields[-2]
+                old_prob = float(fields[-3])
+                new_prob = float(fields[-1])
+                
+                self.clusters.append((old_cluster_id, new_cluster_id))
+                self.counts.append(int(fields[0].strip()))
+                self.ids.append(fields[1].strip())
+                self.groups.append(group)
+                self.probabilities.append((old_prob, new_prob))
+                
+        assert num(self.counts) == num(self.clusters) == num(self.ids) == num(self.groups) == num(self.probabilities), \
+            "Mismatched number of orthogroups, clusters, counts, or IDs"
+
+
+        
+    def format_orthogroups_header(self, species=None, id=None):
+        if id is None:
+            id = self._prefix
+        if species is None:
+            species = self.species
+        return '%s\t%s\tManualID\tManualProb\tPostID\tPostProb' % (id, _TAB.join(species))
+
+    
+    def format_orthogroups_record(self, id=None, cluster=None, prob=None, group=None, count=0, index=None):
+        if index is not None:
+            id = self.ids[index]
+            group = self.groups[index]
+            count = self.counts[index]
+            cluster = self.clusters[index]
+            prob = self.probabilities[index]
+        
+        return _TAB.join((
+            str(count), 
+            str(id),
+            _TAB.join(map(self._join_on_comma, group)),
+            str(cluster[0]), '%g' % prob[0],
+            str(cluster[1]), '%g' % prob[1],
+        ))

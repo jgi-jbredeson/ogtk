@@ -21,6 +21,7 @@ from og.core.compression import is_stream, open
 from og.core.parsers.config import SpeciesConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.orthogroups import CountedClusteredOrthogroups
+from og.core.parsers.orthogroups import ClusterErrorOrthogroups
 from og.core.parsers.assembly_report import is_chr as _localized
 from og.core.parsers.assembly_report import is_placed as _placed
 from og.constants import (
@@ -78,33 +79,6 @@ class ProbabilitiesTable(object):
             stream.close()
 
 
-            
-class ClusterErrorOrthogroups(CountedClusteredOrthogroups):
-    def format_orthogroups_header(self, species=None, id=None):
-        if id is None:
-            id = self._prefix
-        if species is None:
-            species = self.species
-        return '%s\t%s\tManualID\tManualProb\tPostID\tPostProb' % (id, _TAB.join(species))
-
-    
-    def format_orthogroups_record(self, id=None, cluster=None, prob=None, group=None, count=0, index=None):
-        if index is not None:
-            id = self.ids[index]
-            group = self.groups[index]
-            count = self.counts[index]
-            cluster = self.clusters[index]
-            prob = self.probabilities[index]
-        
-        return _TAB.join((
-            str(count), 
-            str(id),
-            _TAB.join(map(self._join_on_comma, group)),
-            str(cluster[0]), '%g' % prob[0],
-            str(cluster[1]), '%g' % prob[1],
-        ))
-
-    
 
 def _min0(x):
     return 0.0 if x < 0.0 else x
