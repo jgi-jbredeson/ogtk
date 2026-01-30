@@ -92,10 +92,14 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Write output to file [stdout]\n")
     stream.write("\n")
     stream.write("  -O,--output-type <str>\n")
-    stream.write("     Output orthogroups in specified format. [F], OrthoFinder; V, OrthoVenn\n")
+    stream.write("     Output orthogroups in specified format: [F], OrthoFinder; V, OrthoVenn;\n")
+    stream.write("     A, MCScan anchors format\n")
     stream.write("\n")
     stream.write("  -p,--prefix-species-names\n")
     stream.write("     Prepend the locus IDs with the species names declared in the header.\n")
+    stream.write("\n")
+    stream.write("  -P,--remove-species-names\n")
+    stream.write("     Remove prefixed species name {-p} and delimiter {-d} from locus IDs\n")
     stream.write("\n")
     stream.write("  -S,--species-order-file <file>\n")
     stream.write("     Input file listing (one per line) the desired output species order.\n")
@@ -114,15 +118,16 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 def main(argv):
     err = sys.stderr
     output_file = sys.stdout
-    species_delim = '|'
-    replace_delim = species_delim
-    species_prefix = False
+    prefix_delim = '|'
+    replace_delim = prefix_delim
+    prefix_species = False
+    remove_species = False
     oldspecies = None
     oldindices = None
     newspecies = None
     newindices = None
     output_type = 'F'
-    valid_output_types = set('FV')
+    valid_output_types = set('AFV')
     long_flags = (
         'outfile=',
         'output-file=',
@@ -132,10 +137,11 @@ def main(argv):
         'replace-delim',
         'prefix-delim=',
         'prefix-species-names',
+        'remove-species-names',
         'orthovenn',
         'help'
     )
-    short_flags = 'd:o:O:D:pS:vh'
+    short_flags = 'd:o:O:D:PpS:vh'
     
     try:
         options, arguments = getopt(argv, short_flags, long_flags)
@@ -148,11 +154,15 @@ def main(argv):
         elif flag in ('-O','--output-type'):
             output_type = value
         elif flag in ('-d','--prefix-delim'):
-            species_delim = value
+            prefix_delim = value
         elif flag in ('-D','--replace-delim'):
             replace_delim = value
         elif flag in ('-p','--prefix-species-names'):
-            species_prefix = True
+            prefix_species = True
+            remove_species = False
+        elif flag in ('-P','--remove-species-names'):
+            prefix_species = False
+            remove_species = True
         elif flag in ('-S','--species-order','--species-order-file'):
             newspecies = read_order_file(value)
             newindices = index_list(newspecies)
@@ -193,14 +203,28 @@ def main(argv):
                 newgroup[newindices[species]] = tuple()
         ortho.groups[g] = newgroup
 
-    if species_prefix:
+    if prefix_species:
         for g in range(num(ortho.groups)):
             for s in range(num(ortho.species)):
+                if ortho.groups[g][s] is None:
+                    continue
                 ortho.groups[g][s] = tuple(
-                    map(lambda L: ortho.species[s] + species_delim + L.replace(species_delim,replace_delim),
+                    map(lambda L: ortho.species[s] + prefix_delim + L.replace(prefix_delim,replace_delim),
                         ortho.groups[g][s])
                 )
-        
+    if remove_species:
+        for g in range(num(ortho.groups)):
+            for s in range(num(ortho.species)):
+                members = list()
+                prefix = ortho.species[s] + prefix_delim
+                if ortho.groups[g][s] is None:
+                    continue
+                for member in ortho.groups[g][s]:
+                    if member.startswith(prefix):
+                        member = member[len(prefix):]
+                    members.append(member)
+                ortho.groups[g][s] = tuple(members)
+            
     if output_type == 'V':
         orthogroups = []
         for g in range(num(ortho.groups)):

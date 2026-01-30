@@ -32,6 +32,7 @@ _DEBUG = False
 num = len
 
 
+
 def usage(message=None, exitcode=1, stream=sys.stderr):
     message = _EMPTY if message is None else 'ERROR: %s\n\n' % message
     stream.write("\n")
@@ -42,6 +43,11 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Usage:   %s [options] <training.tsv> <error.tsv>\n" % __program__)
     stream.write("\n")
     stream.write("Options:\n")
+    stream.write("  -G,--ignore-groups <lab1>[,<lab2>[,...]]\n")
+    stream.write("     Exclude groups, designated by their comma-separated list of group\n")
+    stream.write("     names, from reassignment. Orthogroups in the designated synteny groups\n")
+    stream.write("     will not be reassigned.\n")
+    stream.write("\n")
     stream.write("  -p,--min-prob-reassign <float>  (default: 0.5)\n")
     stream.write("     Reassign orthogroups with posterior probabilities greater-than or equal\n")
     stream.write("     to the specified threshold.\n")
@@ -64,10 +70,12 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     sys.exit(exitcode)
 
 
+
 def main(argv):
-    short_options = 'hP:'
+    short_options = 'hG:p:'
     long_options = (
         'help',
+        'ignore-groups=',
         'min-prob-reassign='
     )
     try:
@@ -75,12 +83,15 @@ def main(argv):
     except getopt.GetoptError as message:
         usage(message)
 
+    ignore_groups = set()
     min_prob_reassign = 0.5
     min_prob_preserve = -1.0
     for flag, value in options:
         if   flag in ('-h','--help'):
             usage(exitcode=0)
-        elif flag in ('-P','--min-prob-reassign'):
+        elif flag in ('-G','--ignore-groups'):
+            ignore_groups = set(value.rstrip(_COMMA).split(_COMMA))
+        elif flag in ('-p','--min-prob-reassign'):
             min_prob_reassign = float(value)
         # elif flag in ('-P','--max-prob-preserve'):
         #     min_prob_preserve = float(value)
@@ -95,6 +106,8 @@ def main(argv):
     reassign = dict()
     preserve = dict()
     for i in range(num(orthoP.ids)):
+        if orthoP.clusters[i][1] in ignore_groups:
+            continue
         if orthoP.probabilities[i][1] >= min_prob_reassign:
             reassign[orthoP.ids[i]] = (orthoP.clusters[i][1], orthoP.probabilities[i][1])
         # elif orthoP.probabilities[i][1] >= min_prob_preserve:

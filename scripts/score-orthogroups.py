@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-# TODO: modify to allow reading different file input Orthofinder-like file formats
 
 import os
 
@@ -84,47 +83,50 @@ def _min0(x):
     return 0.0 if x < 0.0 else x
 
 
+
 def index_list(lst):
     return { item: i for i, item in enumerate(lst) }
 
     
+
 def _calc_joint_prob(ortho):
     total = 0
     joint_freq = {}
     num_clusters = num(set(ortho.clusters))
     cluster_index = index_list(sorted(set(ortho.clusters)))
-    for g in range(num(ortho.groups)):
-        for s in range(num(ortho.species)):
-            if ortho.groups[g][s] is None:
+    for group_index in range(num(ortho.groups)):
+        for species_index in range(num(ortho.species)):
+            if ortho.groups[group_index][species_index] is None:
                 continue
-            for member in ortho.groups[g][s]:
+            for member in ortho.groups[group_index][species_index]:
                 if member not in joint_freq:
                     joint_freq[member] = [0] * num_clusters
                     
-                joint_freq[member][cluster_index[ortho.clusters[g]]] += ortho.counts[g]
-                total += ortho.counts[g]
+                joint_freq[member][cluster_index[ortho.clusters[group_index]]] += ortho.counts[group_index]
+                total += ortho.counts[group_index]
 
     total = float(total)
     for member in joint_freq:
-        for c in range(num(joint_freq[member])):
-            joint_freq[member][c] = float(joint_freq[member][c]) / total
+        for clust_index in range(num(joint_freq[member])):
+            joint_freq[member][clust_index] = float(joint_freq[member][clust_index]) / total
 
     return joint_freq
+
 
 
 def _calc_marginal_prob(ortho):
     total = 0
     mrgnl_freq = {}
-    for g in range(num(ortho.groups)):
-        for s in range(num(ortho.species)):
-            if ortho.groups[g][s] is None:
+    for group_index in range(num(ortho.groups)):
+        for species_index in range(num(ortho.species)):
+            if ortho.groups[group_index][species_index] is None:
                 continue
-            for member in ortho.groups[g][s]:
+            for member in ortho.groups[group_index][species_index]:
                 if member in mrgnl_freq:
-                    mrgnl_freq[member] += ortho.counts[g]
+                    mrgnl_freq[member] += ortho.counts[group_index]
                 else:
-                    mrgnl_freq[member] = ortho.counts[g]
-                total += ortho.counts[g]
+                    mrgnl_freq[member] = ortho.counts[group_index]
+                total += ortho.counts[group_index]
 
     total = float(total)
     for member in mrgnl_freq:
@@ -132,11 +134,89 @@ def _calc_marginal_prob(ortho):
     
     return mrgnl_freq
 
+
+
+def calc_cluster_joint_freqs(
+        ortho, namemap, ignore_groups=set(),
+        ignore_unplaced=0, is_placed=_placed, init=1e-6
+):
+    cluster_freqs = dict()
+    cluster_names = sorted(set(ortho.clusters))
+    cluster_inits = {species_name: {None: 1} for species_name in ortho.species}
+    for species_name in ortho.species:
+        if species_name not in namemap.species:
+            raise KeyError("Species name not found in config: %s" % species_name)
+        for member in namemap.species[species_name].references:
+            if member == namemap.species[species_name].unplaced_id or \
+               not is_placed(namemap.species[species_name].references[member]):
+                if ignore_unplaced == _STRICT:
+                    continue
+            cluster_inits[species_name][member] = 1
+
+    for cluster_name in cluster_names:
+        if cluster_name in ignore_groups:
+            continue
+        cluster_freqs[cluster_name] = {
+            species_name: cluster.copy() for species_name, cluster in cluster_inits.items()
+        }
+        
+    for group_index in range(num(ortho.groups)):
+        if ortho.clusters[group_index] in ignore_groups:
+            continue
+        for species_index in range(num(ortho.species)):
+            n = 0
+            for member in ortho.groups[group_index][species_index]:
+                if member == namemap.species[ortho.species[species_index]].unplaced_id or \
+                   not is_placed(namemap.species[ortho.species[species_index]].references[member]):
+                    if ignore_unplaced == _STRICT:
+                        continue
+                cluster_freqs[ortho.clusters[group_index]][ortho.species[species_index]][member] += ortho.counts[group_index]
+                n += 1
+            if n == 0:
+                cluster_freqs[ortho.clusters[group_index]][ortho.species[species_index]][None] += 1
+
     
-def calc_conditional_prob(orthoA, orthoB, namemap, is_placed=_placed, ignore_unplaced=0, init=1e-6):
+    for cluster_name in cluster_names:
+        if cluster_name in ignore_groups:
+            continue        
+        for species_name in cluster_freqs[cluster_name]:
+            total = float(sum(cluster_freqs[cluster_name][species_name].values()))
+
+            cluster_freqs[cluster_name][species_name] = {
+                key: val / total for key, val in cluster_freqs[cluster_name][species_name].items()
+            }
+            cluster_freqs[cluster_name][species_name][None] = init
+            
+    return cluster_freqs
+
+
+
+def calc_cluster_marginal_freqs(ortho, ignore_groups=set()):
+    total = 0
+    cluster_freqs = dict()
+    cluster_names = sorted(set(ortho.clusters))
+    for group_index in range(num(ortho.groups)):
+        if ortho.clusters[group_index] in ignore_groups:
+            continue
+        try:
+            cluster_freqs[ortho.clusters[group_index]] += ortho.counts[group_index]
+        except KeyError:
+            cluster_freqs[ortho.clusters[group_index]]  = ortho.counts[group_index]
+        total += ortho.counts[group_index]
+        
+    cluster_freqs = {key: val / total for key, val in cluster_freqs.items()}
+        
+    return cluster_freqs
+
+
+
+def calc_conditional_prob(
+        orthoA, orthoB, namemap, ignore_groups=set(),
+        ignore_unplaced=0, is_placed=_placed, init=1e-6
+):
     """
-    Calculate the joint probability of chr and cluster, divided by the marginal
-    probability of a chr.
+    Calculate the joint probability of cluster (A) and chr (B), divided by the
+    marginal probability of a chr.
 
     By Bayes' Theorum:
 
@@ -144,64 +224,83 @@ def calc_conditional_prob(orthoA, orthoB, namemap, is_placed=_placed, ignore_unp
                = ((P(B n A) / P(A)) * P(A)) / P(B)
                =   P(B n A) / P(B)
     """
-    joint_prob = _calc_joint_prob(orthoB)
-    marginal_prob = _calc_marginal_prob(orthoB)
+    joint_prob = \
+        calc_cluster_joint_freqs(
+            orthoB,
+            namemap,
+            ignore_groups=ignore_groups,
+            ignore_unplaced=ignore_unplaced,
+            is_placed=_placed
+        )  #_calc_joint_prob(orthoB)
     
+    marginal_prob = \
+        calc_cluster_marginal_freqs(
+            orthoB,
+            ignore_groups=ignore_groups,
+        )  # _calc_marginal_prob(orthoB)
+
     probs = ProbabilitiesTable()
     probs.colnames = sorted(set(orthoB.clusters))
-    prior_species = set(orthoB.species)    
+    probs.colindex = index_list(probs.colnames)
+    prior_species = set(orthoB.species)
     num_clusters = num(probs.colnames)
-    for g in range(num(orthoA.groups)):
+    
+    for group_index in range(num(orthoA.groups)):
         cluster_prob = [-1] * num_clusters
-        
-        for s in range(num(orthoA.species)):
-            if orthoA.species[s] not in prior_species:
+
+        for cluster_name in joint_prob:
+            if cluster_name in ignore_groups:
                 continue
-            for c in range(num_clusters):
-                prob = init
-                count = 0
-                for member in orthoA.groups[g][s]:
-                    if member == namemap.species[orthoA.species[s]].unplaced_id or \
-                       not is_placed(namemap.species[orthoA.species[s]].references[member]):
+            
+            for species_index in range(num(orthoA.species)):
+                if orthoA.species[species_index] not in joint_prob[cluster_name]:
+                    continue
+                n = 0
+                prob = 0.0
+                for member in orthoA.groups[group_index][species_index]:
+                    if member == namemap.species[orthoA.species[species_index]].unplaced_id or \
+                       not is_placed(namemap.species[orthoA.species[species_index]].references[member]):
                         if ignore_unplaced == _STRICT:
                             continue
-                    try:
-                        prob += joint_prob[member][c] / marginal_prob[member]
-                        count += 1
-                    except KeyError:
-                        pass
+                    prob += joint_prob[cluster_name][orthoA.species[species_index]][member]
+                    n += 1
+                if n == 0:
+                    prob = joint_prob[cluster_name][orthoA.species[species_index]][None]
                     
-                if cluster_prob[c] < 0:
-                    cluster_prob[c]  = (prob / float(max(1, count)))
+                if cluster_prob[probs.colindex[cluster_name]] < 0:
+                    cluster_prob[probs.colindex[cluster_name]]  = prob
                 else:
-                    cluster_prob[c] *= (prob / float(max(1, count)))
-
+                    cluster_prob[probs.colindex[cluster_name]] *= prob
+                    
+            cluster_prob[probs.colindex[cluster_name]] *= marginal_prob[cluster_name]
+            
         cluster_prob = list(map(_min0, cluster_prob))
         cluster_norm = sum(cluster_prob) or 1.0
-        cluster_prob = list(map(lambda p: p/cluster_norm, cluster_prob))
+        cluster_prob = list(map(lambda prob: prob / cluster_norm, cluster_prob))
         
-        probs.rownames.append(orthoA.ids[g])
+        probs.rownames.append(orthoA.ids[group_index])
         probs.matrix.append(cluster_prob)
 
-    probs.colindex = index_list(probs.colnames)
     probs.rowindex = index_list(probs.rownames)
         
     return probs
 
 
+
 def assign_clusters(ortho, probs):
-    cindices = list(range(num(probs.colnames)))
-    for g in range(num(ortho.groups)):
-        gid = ortho.ids[g]
-        if gid in probs.rowindex:
-            cid = max(
-                cindices,
-                key=probs.matrix[probs.rowindex[gid]].__getitem__
+    cluster_indices = list(range(num(probs.colnames)))
+    for group_index in range(num(ortho.groups)):
+        group_id = ortho.ids[group_index]
+        if group_id in probs.rowindex:
+            cluster_id = max(
+                cluster_indices,
+                key=probs.matrix[probs.rowindex[group_id]].__getitem__
             )
-            ortho.clusters[g] = probs.colnames[cid]
-            ortho.probabilities[g] = probs.matrix[probs.rowindex[gid]][cid]
+            ortho.clusters[group_index] = probs.colnames[cluster_id]
+            ortho.probabilities[group_index] = probs.matrix[probs.rowindex[group_id]][cluster_id]
 
     return ortho
+
 
 
 def _copy_to_CountedClusteredOrthogroups(ortho):
@@ -215,6 +314,7 @@ def _copy_to_CountedClusteredOrthogroups(ortho):
     clust.counts = [1] * num(ortho.groups)
     clust.probabilities = [-1] * num(ortho.groups)
     return clust
+
 
 
 def open_inferred_format(filename):
@@ -237,6 +337,7 @@ def open_inferred_format(filename):
         return _copy_to_CountedClusteredOrthogroups(ortho)
 
     
+
 def usage(message=None, exitcode=1, stream=sys.stderr):
     message = _EMPTY if message is None else 'ERROR: %s\n\n' % message
     stream.write("\n")
@@ -247,8 +348,15 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Usage:   %s [options] <classified.tsv> [unclassified.tsv] <in.yaml>\n" % __program__)
     stream.write("\n")
     stream.write("Options:\n")
+    #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
+    #            0        10        20        30        40        50        60        70        80    
     stream.write("  -E,--check-errors\n")
     stream.write("     Check for classification errors in classified.tsv\n")
+    stream.write("\n")
+    stream.write("  -G,--ignore-groups <name1>[,<name2>[,...]]\n")
+    stream.write("     Exclude groups, designated by their comma-separated list of group\n")
+    stream.write("     names, from forming Bayesian classification groups. Orthogroups in\n")
+    stream.write("     the designated synteny groups will be clustered to other groups.\n")
     stream.write("\n")
     stream.write("  -I,--ignore-unplaced-strictly\n")
     stream.write("     Strictly ignore unplaced sequences in filtering. If a cell in the\n")
@@ -266,7 +374,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("  -u,--ignore-unlocalized\n")
     stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
     stream.write("     designated sequence names, not to their placed chromosome names.\n")
-    stream.write("\n")    
+    stream.write("\n")
     stream.write("  -h,--help\n")
     stream.write("     Print this help message and exit\n")
     #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
@@ -283,11 +391,13 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     sys.exit(exitcode)
 
     
+
 def main(argv):
-    short_options = 'hEiIuP:'
+    short_options = 'hEG:iIuP:'
     long_options = (
         'help',
         'check-errors',
+        'ignore-groups=',
         'ignore-unlocalized',
         'ignore-unplaced-strictly',
         'ignore-unplaced-leniently',
@@ -300,16 +410,26 @@ def main(argv):
 
     check_errors = False
     is_placed = _placed
+    ignore_groups = set()
     ignore_unplaced = 0  # _STRICT
     output_posterior_file = None
     for flag, value in options:
-        if   flag in ('-h','--help'): usage(exitcode=0)
-        elif flag in ('-E','--check-errors'): check_errors = True
-        elif flag in ('-u','--ignore-unlocalized'): is_placed = _localized
-        elif flag in ('-i','--ignore-unplaced-leniently'): ignore_unplaced = _LENIENT
-        elif flag in ('-I','--ignore-unplaced-strictly'): ignore_unplaced = _STRICT
-        elif flag in ('-P','--output-posterior-prob-file'): output_posterior_file = value
+        if   flag in ('-h','--help'):
+            usage(exitcode=0)
+        elif flag in ('-E','--check-errors'):
+            check_errors = True
+        elif flag in ('-u','--ignore-unlocalized'):
+            is_placed = _localized
+        elif flag in ('-i','--ignore-unplaced-leniently'):
+            ignore_unplaced = _LENIENT
+        elif flag in ('-I','--ignore-unplaced-strictly'):
+            ignore_unplaced = _STRICT
+        elif flag in ('-P','--output-posterior-prob-file'):
+            output_posterior_file = value
+        elif flag in ('-G','--ignore-groups'):
+            ignore_groups = set(value.strip(_COMMA).split(_COMMA))
 
+            
     if num(arguments) != 2 and \
        num(arguments) != 3:
         usage('Unexpected number of arguments')
@@ -325,28 +445,28 @@ def main(argv):
     orthoU = open_inferred_format(arguments[1])
     config = SpeciesConfigFile(arguments[2], load_files=True, map_assigned_molecule=True)
     
-    pprobs = calc_conditional_prob(orthoU, orthoM, config, is_placed, ignore_unplaced)
+    pprobs = calc_conditional_prob(orthoU, orthoM, config, ignore_groups, ignore_unplaced, is_placed)
 
     orthoU = assign_clusters(orthoU, pprobs)
 
     if check_errors:
-        cindex = pprobs.colindex
-        rindex = pprobs.rowindex
+        col_index = pprobs.colindex
+        row_index = pprobs.rowindex
         errors = ClusterErrorOrthogroups()
         errors.species = orthoU.species
-        for g in range(num(orthoU.groups)):
-            if orthoU.clusters[g] != orthoM.clusters[g]:
+        for group_index in range(num(orthoU.groups)):
+            if orthoU.clusters[group_index] != orthoM.clusters[group_index]:
                 errors.clusters.append((
-                    orthoM.clusters[g],
-                    orthoU.clusters[g]
+                    orthoM.clusters[group_index],
+                    orthoU.clusters[group_index]
                 ))
                 errors.probabilities.append((
-                    pprobs.matrix[rindex[orthoM.ids[g]]][cindex[orthoM.clusters[g]]],
-                    pprobs.matrix[rindex[orthoU.ids[g]]][cindex[orthoU.clusters[g]]]
+                    pprobs.matrix[row_index[orthoM.ids[group_index]]][col_index[orthoM.clusters[group_index]]],
+                    pprobs.matrix[row_index[orthoU.ids[group_index]]][col_index[orthoU.clusters[group_index]]]
                 ))
-                errors.counts.append(orthoU.counts[g])
-                errors.groups.append(orthoU.groups[g])
-                errors.ids.append(orthoU.ids[g])
+                errors.counts.append(orthoU.counts[group_index])
+                errors.groups.append(orthoU.groups[group_index])
+                errors.ids.append(orthoU.ids[group_index])
 
         orthoU = errors
 
@@ -354,6 +474,7 @@ def main(argv):
         pprobs.to_table(output_posterior_file)
     orthoU.to_table()
 
-    
+
+
 if __name__ == '__main__':
     main(sys.argv[1:])
