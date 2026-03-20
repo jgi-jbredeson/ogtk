@@ -44,6 +44,7 @@ BIN_TARGETS = \
 	$(BIN_DIR)/join-orthogroups \
 	$(BIN_DIR)/parse-orthogroups \
 	$(BIN_DIR)/score-orthogroups \
+	$(BIN_DIR)/select-orthogroups \
 	$(BIN_DIR)/update-training-orthogroups \
 	$(BIN_DIR)/upset-orthogroups \
 	$(BIN_DIR)/plot-color-legend \

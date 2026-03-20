@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 
 import os
 import sys
@@ -17,6 +16,7 @@ from og.constants import (
     _EMPTY,
     _EOL
 )
+
 __authors__ = 'Jessen V. Bredeson'
 __program__ = os.path.basename(__file__)
 __pkgname__ = '__PACKAGE_NAME__'
@@ -30,16 +30,18 @@ max_missing_thresh = 2
 
 def format_intersection_counts_header():
     return ("q_OG\tq_species\tq_members\t"
-            "t_OG\tt_species\tt_members\tintersections\thits")
+            "t_OG\tt_species\tt_members\t"
+            "i_species\ti_members\t"
+            "hits")
 
 
 def format_intersection_counts_record(
         qry_id, qry_species, qry_members,
-        trg_id, trg_species, trg_members, intersections, hits):
-    return "%s\t%d\t%d\t%s\t%d\t%d\t%d\t%d" % (
+        trg_id, trg_species, trg_members, i_species, i_members, hits):
+    return "%s\t%d\t%d\t%s\t%d\t%d\t%d\t%d\t%d" % (
         qry_id, qry_species, qry_members,
         trg_id, trg_species, trg_members,
-        intersections, hits
+        i_species, i_members, hits
     )
 
 
@@ -256,11 +258,12 @@ def main(argv):
             num_isec_members = num(
                 qry_orthoset.groups[q] & trg_orthoset.groups[t]
             )
-            if num_isec_members > max_num_isec_members:
-                max_num_isec_members = num_isec_members
-                max_t = [t]
-            elif num_isec_members == max_num_isec_members:
-                max_t.append(t)
+            if num_isec_members:
+                if num_isec_members > max_num_isec_members:
+                    max_num_isec_members = num_isec_members
+                    max_t = [t]
+                elif num_isec_members == max_num_isec_members:
+                    max_t.append(t)
 
         isec_list.extend(
             ((-max_num_isec_members, num(max_t), q, t) for t in reversed(max_t))
@@ -281,9 +284,9 @@ def main(argv):
         num_isec_species = 0
         isec_members = qry_orthoset.groups[q] & trg_orthoset.groups[t]
         for species in qry_ortho.species:
-            num_isec_species += num(
+            num_isec_species += int(bool(
                 set(qry_ortho.groups[q][qry_species_index[species]]) & isec_members
-            )
+            ))
 
         if not (min_isec_species <= num_isec_species <= max_isec_species):
             continue
@@ -297,6 +300,7 @@ def main(argv):
                     trg_ortho.ids[t],
                     trg_species_count[t],
                     len(trg_orthoset.groups[t]),
+                    abs(num_isec_species),
                     abs(num_isec_members),
                     num_t
                 ) + _EOL
@@ -336,6 +340,7 @@ def main(argv):
                         qry_species_count[q],
                         len(qry_orthoset.groups[q]),
                         'NONE',
+                        0,
                         0,
                         0,
                         0,

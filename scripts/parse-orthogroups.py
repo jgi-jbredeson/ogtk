@@ -4,7 +4,6 @@ import os
 import sys
 
 from getopt import getopt, GetoptError
-#from fastx.utils.io import load_listfile
 from og.core.utils import index_list
 from og.core.compression import is_stream
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
@@ -208,17 +207,21 @@ def main(argv):
             for s in range(num(ortho.species)):
                 if ortho.groups[g][s] is None:
                     continue
-                ortho.groups[g][s] = tuple(
-                    map(lambda L: ortho.species[s] + prefix_delim + L.replace(prefix_delim,replace_delim),
-                        ortho.groups[g][s])
-                )
+                members = list()
+                prefix = ortho.species[s] + prefix_delim
+                for member in ortho.groups[g][s]:
+                    if not member.startswith(prefix):
+                        member = prefix + member.replace(prefix_delim,replace_delim)
+                    members.append(member)
+                ortho.groups[g][s] = tuple(members)
+                
     if remove_species:
         for g in range(num(ortho.groups)):
             for s in range(num(ortho.species)):
-                members = list()
-                prefix = ortho.species[s] + prefix_delim
                 if ortho.groups[g][s] is None:
                     continue
+                members = list()
+                prefix = ortho.species[s] + prefix_delim
                 for member in ortho.groups[g][s]:
                     if member.startswith(prefix):
                         member = member[len(prefix):]
