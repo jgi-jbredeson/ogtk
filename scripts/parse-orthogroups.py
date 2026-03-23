@@ -100,6 +100,9 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("  -P,--remove-species-names\n")
     stream.write("     Remove prefixed species name {-p} and delimiter {-d} from locus IDs\n")
     stream.write("\n")
+    stream.write("  -s,--species-order <species1[,species2[,...]]>\n")
+    stream.write("     Input comma-separated list of desired output species order.\n")
+    stream.write("\n")    
     stream.write("  -S,--species-order-file <file>\n")
     stream.write("     Input file listing (one per line) the desired output species order.\n")
     stream.write("\n")
@@ -121,10 +124,10 @@ def main(argv):
     replace_delim = prefix_delim
     prefix_species = False
     remove_species = False
-    oldspecies = None
-    oldindices = None
-    newspecies = None
-    newindices = None
+    oldspecies = []
+    oldindices = {}
+    newspecies = []
+    newindices = {}
     output_type = 'F'
     valid_output_types = set('AFV')
     long_flags = (
@@ -140,7 +143,7 @@ def main(argv):
         'orthovenn',
         'help'
     )
-    short_flags = 'd:o:O:D:PpS:vh'
+    short_flags = 'd:o:O:D:PpS:s:vh'
     
     try:
         options, arguments = getopt(argv, short_flags, long_flags)
@@ -162,9 +165,12 @@ def main(argv):
         elif flag in ('-P','--remove-species-names'):
             prefix_species = False
             remove_species = True
-        elif flag in ('-S','--species-order','--species-order-file'):
-            newspecies = read_order_file(value)
-            newindices = index_list(newspecies)
+        elif flag in ('-S','--species-order-file'):
+            newspecies.extend(read_order_file(value))
+            newindices.update(index_list(newspecies))
+        elif flag in ('-s','--species-order'):
+            newspecies.extend(value.split(_COMMA))
+            newindices.update(index_list(newspecies))
         elif flag in ('-v','--orthovenn'):
             output_type = 'V'
         elif flag in ('-h','--help'):
@@ -184,13 +190,13 @@ def main(argv):
     oldspecies = ortho.species
     oldindices = index_list(oldspecies)
 
-    if newspecies is None:
-        newspecies = oldspecies
-        newindices = oldindices
-    else:
+    if newspecies:
         for species in newspecies:
             if species not in oldindices:
                 raise KeyError("Species not found in orthogroups file: `%s`" % species)
+    else:
+        newspecies = oldspecies
+        newindices = oldindices
             
     ortho.species = newspecies    
     for g in range(num(ortho.groups)):
