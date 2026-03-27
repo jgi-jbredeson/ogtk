@@ -45,6 +45,17 @@ def format_intersection_counts_record(
     )
 
 
+def index_members_by_ortho_ids(ortho):
+    index = dict()
+    for g in range(num(ortho.groups)):
+        for s in range(num(ortho.species)):
+            if ortho.groups[g][s] is None:
+                continue
+            for member in ortho.groups[g][s]:
+                index[member] = g
+    return index
+
+
 def get_orthoset(orthogroup):
     orthoset = OrthoFinderOrthogroups()
     orthoset.species = orthogroup.species
@@ -73,14 +84,11 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Usage:   %s [options] <queryOG.tsv> <targetOG.tsv> [in.yaml]\n" % __program__)
     stream.write("\n")
     stream.write("Options:\n")
-    stream.write("  -a,--allow-multiple-best-targets\n")
-    stream.write("     Allow queries to have multiple best (equal-scoring) targets. The\n")
-    stream.write("     number of targets written per query is still restricted using `-Q`\n")
-    stream.write("     By default, if the number of equally-scoring targets exceeds the\n")
-    stream.write("     value of `-Q`, the query is left un-joined.\n")
-    stream.write("\n")
     stream.write("  -c,--output-intersection-counts-file <file>\n")
     stream.write("     Write a counts table for intersetions between orthogroup sets.\n")
+    stream.write("\n")
+    stream.write("  -I,--output-intersection-members\n")
+    stream.write("     For each query-target pair, output only intersecting members [OG]\n")
     stream.write("\n")
     stream.write("  -L,--left-outer-join\n")
     stream.write("     Perform a left outer join [inner]\n")
@@ -129,10 +137,9 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 
     
 def main(argv):
-    short_flags = 'hac:Lm:M:No:Q:s:S:T:u'
+    short_flags = 'haAc:ILm:M:No:Q:s:S:T:u'
     long_flags = (
         'help',
-        'allow-multiple-best-targets',
         'left-outer-join',
         'min-intersecting-members=',
         'max-intersecting-members=',
@@ -142,6 +149,8 @@ def main(argv):
         'max-intersecting-targets=',
         'output-sequence-names',
         'output-file=',
+        'allow-multiple-best-targets',
+        'output-intersection-members',
         'output-intersection-counts-file=',
         'ignore-unlocalized'
     )
@@ -161,14 +170,16 @@ def main(argv):
     max_isec_species = _POS_INF 
     left_outer_join = False
     output_seq_names = False
+    output_all_members = False
     output_file = sys.stdout
     isec_counts_file = False
-    allow_multiple_best_targets = False
     for flag, value in options:
         if   flag in ('-h','--help'):
             usage(exitcode=0)
         elif flag in ('-a','--allow-multiple-best-targets'):
-            allow_multiple_best_targets = True
+            pass
+        elif flag in ('-I','--output-all-members'):
+            output_all_members = True
         elif flag in ('-m','--min-intersecting-members'):
             min_isec_members = int(value)
         elif flag in ('-M','--max-intersecting-members'):
@@ -227,11 +238,17 @@ def main(argv):
         len(tuple(filter(_isnotNone, group))) for group in trg_ortho.groups
     ]
 
+    qry_members_index = index_members_by_ortho_ids(qry_ortho)
+    trg_members_index = index_members_by_ortho_ids(trg_ortho)
+
     qry_species_index = index_list(qry_ortho.species)
     trg_species_index = index_list(trg_ortho.species)
 
-    qry_counts = [0] * num(qry_ortho.groups)
-    trg_counts = [0] * num(trg_ortho.groups)
+    qry_ids_index = index_list(qry_ortho.ids)
+    trg_ids_index = index_list(trg_ortho.ids)
+
+    qry_mapped_counts = [0] * num(qry_ortho.groups)
+    trg_mapped_counts = [0] * num(trg_ortho.groups)
 
     out_species = qry_ortho.species.copy()
     new_species = sorted(
@@ -250,47 +267,37 @@ def main(argv):
         out_ortho.format_orthogroups_header(out_species) + _EOL
     )
 
-    isec_list = []
-    for q in range(num(qry_ortho.groups)):
-        max_t = []
-        max_num_isec_members = -1
-        for t in range(num(trg_ortho.groups)):
-            num_isec_members = num(
-                qry_orthoset.groups[q] & trg_orthoset.groups[t]
-            )
-            if num_isec_members:
-                if num_isec_members > max_num_isec_members:
-                    max_num_isec_members = num_isec_members
-                    max_t = [t]
-                elif num_isec_members == max_num_isec_members:
-                    max_t.append(t)
+    isec_counts = dict()
+    for member in qry_members_index:
+        if member in trg_members_index:
+            q = qry_members_index[member]
+            t = trg_members_index[member]
+            
+            if (q,t) in isec_counts:
+                isec_counts[(q,t)] += 1
+            else:
+                isec_counts[(q,t)] = 1
 
-        isec_list.extend(
-            ((-max_num_isec_members, num(max_t), q, t) for t in reversed(max_t))
-        )
-                
-    isec_list.sort()
+    qry_mapped_members = dict()
+    trg_mapped_members = dict()
+    for q,t in sorted(isec_counts, key=isec_counts.get, reverse=True):    
+        num_isec_members = isec_counts[(q,t)]
 
-    
-    for num_isec_members, num_t, q, t in isec_list:
-        if not allow_multiple_best_targets and num_t > max_queries:
-            continue
-        
-        if (trg_counts[t] >= max_targets) or \
-           (qry_counts[q] >= max_queries) or \
-           (not (min_isec_members <= abs(num_isec_members) <= max_isec_members)):
+        if (trg_mapped_counts[t] >= max_targets) or \
+           (qry_mapped_counts[q] >= max_queries):
             continue
 
         num_isec_species = 0
-        isec_members = qry_orthoset.groups[q] & trg_orthoset.groups[t]
-        for species in qry_ortho.species:
+        for s in range(num(qry_ortho.species)):
             num_isec_species += int(bool(
-                set(qry_ortho.groups[q][qry_species_index[species]]) & isec_members
+                set(qry_ortho.groups[q][s]) & trg_orthoset.groups[t]
             ))
 
         if not (min_isec_species <= num_isec_species <= max_isec_species):
             continue
-            
+        if not (min_isec_members <= num_isec_members <= max_isec_members):
+            continue
+        
         if isec_counts_file:
             isec_counts_file.write(
                 format_intersection_counts_record(
@@ -300,17 +307,31 @@ def main(argv):
                     trg_ortho.ids[t],
                     trg_species_count[t],
                     len(trg_orthoset.groups[t]),
-                    abs(num_isec_species),
-                    abs(num_isec_members),
-                    num_t
+                    num_isec_species,
+                    num_isec_members,
+                    0
                 ) + _EOL
             )
             
         out_id = qry_ortho.ids[q] + _COLON + trg_ortho.ids[t]
-        out_group = qry_ortho.groups[q].copy()
+        if output_all_members:
+            out_group = [()] * num(qry_ortho.species)
+            for s in range(num(qry_ortho.species)):
+                out_group[s] = tuple(
+                    set(qry_ortho.groups[q][s]) & trg_orthoset.groups[t]
+                )
+        else:
+            out_group = qry_ortho.groups[q].copy()
+            
         for species in new_species:
-            out_group.append(trg_ortho.groups[t][trg_species_index[species]])
+            out_group.append(
+                trg_ortho.groups[t][trg_species_index[species]]
+            )
 
+        if left_outer_join and output_all_members:
+            for member in (qry_orthoset.groups[q] & trg_orthoset.groups[t]):
+                qry_members_index[member] = ~qry_members_index[member]
+            
         if output_seq_names:
             for i in range(num(out_species)):
                 out_group[i] = sorted(
@@ -323,23 +344,34 @@ def main(argv):
                 )
                             
         output_file.write(
-            out_ortho.format_orthogroups_record(out_id, out_group) + _EOL
+            out_ortho.format_orthogroups_record(
+                out_id, out_group
+            ) + _EOL
         )
 
-        qry_counts[q] += 1
-        trg_counts[t] += 1
+        qry_mapped_counts[q] += 1
+        trg_mapped_counts[t] += 1
 
     if left_outer_join:
         for q in range(num(qry_ortho.groups)):
-            if qry_counts[q] > 0:
+            if qry_mapped_counts[q] > 0:
                 continue
+
+            if output_all_members:
+                num_members = 0
+                for s in range(num(qry_ortho.species)):
+                    if qry_ortho.groups[q][s] is None:
+                        continue
+                    for member in qry_ortho.groups[q][s]:
+                        qry_members_index[member] = ~qry_members_index[member]
+            
             if isec_counts_file:
                 isec_counts_file.write(
                     format_intersection_counts_record(
                         qry_ortho.ids[q],
                         qry_species_count[q],
                         len(qry_orthoset.groups[q]),
-                        'NONE',
+                        'DISJOINT',
                         0,
                         0,
                         0,
@@ -348,24 +380,80 @@ def main(argv):
                     ) + _EOL
                 )
                 
-            out_id = qry_ortho.ids[q] + _COLON + 'NONE'
-            out_group = qry_ortho.groups[q] + [tuple()] * num(new_species)
+            out_id = qry_ortho.ids[q] + _COLON + 'DISJOINT'
+            out_group = qry_ortho.groups[q] + [()] * num(new_species)
                 
             if output_seq_names:
-                for i in range(num(out_species)):
-                    out_group[i] = sorted(
+                for s in range(num(out_species)):
+                    out_group[s] = sorted(
                         map_loci_to_sequences(
-                            out_group[i],
-                            config.species[out_species[i]],
+                            out_group[s],
+                            config.species[out_species[s]],
                             is_placed,
                             ignore_unplaced=False
                         )
                     )
                     
             output_file.write(
-                out_ortho.format_orthogroups_record(out_id, out_group) + _EOL
+                out_ortho.format_orthogroups_record(
+                    out_id, out_group
+                ) + _EOL
             )
+            
+        if output_all_members:
+            qq = set()
+            for member in qry_members_index:
+                if qry_members_index[member] < 0:
+                    continue
+                qq.add(qry_members_index[member])
+                
+            for q in sorted(qq):
+                # if qry_mapped_counts[q] == 0:
+                #     continue
+                out_id = qry_ortho.ids[q] + _COLON + 'QRY_ONLY'
+                out_group = [[] for s in range(num(out_species))]
+                num_members = 0
+                for s in range(num(qry_ortho.species)):
+                    if qry_ortho.groups[q][s] is None:
+                        continue
+                    for member in qry_ortho.groups[q][s]:
+                        if qry_members_index[member] < 0:
+                            continue
+                        out_group[s].append(member)
+                        num_members += 1
 
+                if num_members:
+                    if isec_counts_file:
+                        isec_counts_file.write(
+                            format_intersection_counts_record(
+                                qry_ortho.ids[q],
+                                sum(map(bool, out_group)),
+                                num_members,
+                                'QRY_ONLY',
+                                0,
+                                0,
+                                0,
+                                0,
+                                0
+                            ) + _EOL
+                        )
+                    
+                    if output_seq_names:
+                        for i in range(num(out_species)):
+                            out_group[i] = sorted(
+                                map_loci_to_sequences(
+                                    out_group[i],
+                                    config.species[out_species[i]],
+                                    is_placed,
+                                    ignore_unplaced=False
+                                )
+                            )
+                    output_file.write(
+                        out_ortho.format_orthogroups_record(
+                            out_id, out_group
+                        ) + _EOL
+                    )
+            
     if isec_counts_file:
         isec_counts_file.close()
     output_file.close()

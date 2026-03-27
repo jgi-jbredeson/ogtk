@@ -40,6 +40,7 @@ LICENSE    := LICENSE
 
 BIN_TARGETS = \
 	$(BIN_DIR)/cluster-orthogroups \
+	$(BIN_DIR)/count-orthogroups \
 	$(BIN_DIR)/filter-orthogroups \
 	$(BIN_DIR)/join-orthogroups \
 	$(BIN_DIR)/parse-orthogroups \

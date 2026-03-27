@@ -39,10 +39,10 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Usage:   %s [options] <in.tsv> <in.yaml>\n" % __program__)
     stream.write("\n")
     stream.write("Options:\n")
-    stream.write("  -g,--group-by <enum>\n")
-    stream.write("     Group output by membership (=1), number of Multiples (=2) [0]\n")
-    stream.write("     (See the `--max-count` option below)\n")
-    stream.write("\n")
+    # stream.write("  -g,--group-by <enum>\n")
+    # stream.write("     Group output by membership (=1), number of Multiples (=2) [0]\n")
+    # stream.write("     (See the `--max-count` option below)\n")
+    # stream.write("\n")
     stream.write("  -I,--ignore-unplaced-strictly\n")
     stream.write("     Strictly ignore unplaced sequences in filtering. If a cell in the\n")
     stream.write("     input orthogroups table contains no chromosomal sequences, that cell\n")
@@ -68,6 +68,9 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Locus names have already been mapped to their corresponding sequence\n")
     stream.write("     names in the input orthogroups file. Perform filtering accordingly.\n")
     stream.write("\n")
+    stream.write("  -T,--output-totals\n")
+    stream.write("     Output member counts table with a column of row totals appended.\n")
+    stream.write("\n")
     stream.write("  -u,--ignore-unlocalized\n")
     stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
     stream.write("     designated sequence names, not to their placed chromosome names.\n")
@@ -85,12 +88,12 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 
 
 def main(argv):
-    short_flags = 'hg:M:o:pniIu'
+    short_flags = 'hM:o:pniITu'
     long_flags = (
         'help',
-        'group-by=',
         'max-count=',
         'output-file=',
+        'output-totals',
         'input-sequence-names',
         'map-to-sequence-names',
         'ignore-unplaced-leniently',
@@ -102,20 +105,23 @@ def main(argv):
     except getopt.GetoptError as error:
         usage(error)
 
-    group_by = 0
+    # group_by = 0
     max_count = float('inf')
     is_placed = _placed
     map_seq_names = False
     input_seq_names = False
     output_file = STDIO
+    output_totals = False
     ignore_unplaced = 0
     for flag, value in options:
         if flag in ('-h','--help'):
             usage(exitcode=0)
-        elif flag in ('-g','--group-by'):
-            group_by |= int(value)
+        # elif flag in ('-g','--group-by'):
+        #     group_by |= int(value)
         elif flag in ('-o','--output-file'):
             output_file = value
+        elif flag in ('-T','--output-totals'):
+            output_totals = True
         elif flag in ('-M','--max-count'):
             max_count = int(value)
         elif flag in ('-n','--map-to-sequence-names'):
@@ -146,6 +152,8 @@ def main(argv):
                 str(species_id)
             ))
 
+    totals_label = ['Total'] if output_totals else []
+    output.write('\t'.join(['Orthogroup'] + ortho.species + totals_label) + '\n')
     member_counts = dict()
     ortho_counts = dict()
     num_species = num(ortho.species)
@@ -167,7 +175,7 @@ def main(argv):
                     ortho.groups[group_i][species_i]
                 )
                  
-        if map_seq_names:
+        if input_seq_names or map_seq_names:
             for species_i in range(num_species):
                 names = filter_unplaced_sequences(
                     sequence_names[species_i],
@@ -184,60 +192,14 @@ def main(argv):
                 pattern[species_i] = 'M' if num(names) > max_count else str(num(names))
                 num_members += num(names)
 
-        try:
-            member_counts[tuple(pattern)] += num_members
-            ortho_counts[tuple(pattern)] += 1
-        except KeyError:
-            member_counts[tuple(pattern)] = num_members
-            ortho_counts[tuple(pattern)] = 1
-            
-    output.write(
-        _TAB.join((
-            _SPACE.join(ortho.species),
-            'Clusters',
-            'References' if input_seq_names or map_seq_names else 'Proteins'
-        )) + _EOL
-    )
-    if group_by & _MEMBERSHIP:
-        group_patterns = dict()
-        group_counts = dict()
-        if group_by & _MULTIPLES:
-            for pattern in ortho_counts:
-                _pattern = tuple(sorted(pattern))
-                _count = _pattern.count('M')
-                if _count not in group_patterns:
-                    group_patterns[_count] = dict()
-                    group_counts[_count] = 0
-                group_patterns[_count][pattern] = ortho_counts[pattern]
-                group_counts[_count] += ortho_counts[pattern]
-        else:
-            for pattern in ortho_counts:
-                _pattern = tuple(sorted(pattern))
-                if _pattern not in group_patterns:
-                    group_patterns[_pattern] = dict()
-                    group_counts[_pattern] = 0
-                group_patterns[_pattern][pattern] = ortho_counts[pattern]
-                group_counts[_pattern] += ortho_counts[pattern]
-
-        for _pattern in sorted(group_patterns, key=group_counts.get, reverse=True):
-            output.write("##total=%d\n" % group_counts[_pattern])
-            for pattern in sorted(group_patterns[_pattern], key=group_patterns[_pattern].get, reverse=True):
-                output.write(
-                    _TAB.join((
-                        _SPACE.join(pattern),
-                        str(ortho_counts[pattern]),
-                        str(member_counts[pattern])
-                    )) + _EOL
-                )
-    else:
-        for pattern in sorted(ortho_counts, key=ortho_counts.get, reverse=True):
-            output.write(
-                _TAB.join((
-                    _SPACE.join(pattern),
-                    str(ortho_counts[pattern]),
-                    str(member_counts[pattern])
-                )) + _EOL
+        
+        output.write(
+            '%s\t%s%s\n' % (
+                ortho.ids[group_i],
+                '\t'.join(pattern),
+                '\t%d' % (num_members) if output_totals else ''
             )
+        )
             
     output.close()
 
