@@ -26,8 +26,10 @@ from og.constants import _TAB, _SPACE, _EMPTY, _EOL
 
 
 num = len
-_MEMBERSHIP = 0x1
-_MULTIPLES = 0x2
+_GROUP_MEMBERSHIP = 0x1
+_GROUP_MULTIPLES = 0x2
+_SORT_MEMBERS = 0x1
+
 
 def usage(message=None, exitcode=1, stream=sys.stderr):
     message = _EMPTY if message is None else 'ERROR: %s\n\n' % message
@@ -40,8 +42,8 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     stream.write("Options:\n")
     stream.write("  -g,--group-by <enum>\n")
-    stream.write("     Group output by membership (=1), number of Multiples (=2) [0]\n")
-    stream.write("     (See the `--max-count` option below)\n")
+    stream.write("     Group output by membership (=1), number of Multiples (=2)\n")
+    stream.write("     (See the `--max-count` option below), or perform no grouping [0]\n")
     stream.write("\n")
     stream.write("  -I,--ignore-unplaced-strictly\n")
     stream.write("     Strictly ignore unplaced sequences in filtering. If a cell in the\n")
@@ -68,6 +70,10 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Locus names have already been mapped to their corresponding sequence\n")
     stream.write("     names in the input orthogroups file. Perform filtering accordingly.\n")
     stream.write("\n")
+    stream.write("  -s,--sort-by <enum>\n")
+    stream.write("     Sort upset plot rows by number of clusters (=0) (the default) or by\n")
+    stream.write("     number of members (=1)\n")
+    stream.write("\n")
     stream.write("  -u,--ignore-unlocalized\n")
     stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
     stream.write("     designated sequence names, not to their placed chromosome names.\n")
@@ -85,9 +91,10 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 
 
 def main(argv):
-    short_flags = 'hg:M:o:pniIu'
+    short_flags = 'hs:g:M:o:pniIu'
     long_flags = (
         'help',
+        'sort-by=',
         'group-by=',
         'max-count=',
         'output-file=',
@@ -102,6 +109,7 @@ def main(argv):
     except getopt.GetoptError as error:
         usage(error)
 
+    sort_by = 0
     group_by = 0
     max_count = float('inf')
     is_placed = _placed
@@ -113,7 +121,9 @@ def main(argv):
         if flag in ('-h','--help'):
             usage(exitcode=0)
         elif flag in ('-g','--group-by'):
-            group_by |= int(value)
+            group_by |= (0x1 | int(value))
+        elif flag in ('-s','--sort-by'):
+            sort_by |= int(value)
         elif flag in ('-o','--output-file'):
             output_file = value
         elif flag in ('-M','--max-count'):
@@ -198,29 +208,41 @@ def main(argv):
             'References' if input_seq_names or map_seq_names else 'Proteins'
         )) + _EOL
     )
-    if group_by & _MEMBERSHIP:
+
+    if sort_by & _SORT_MEMBERS:
+        def _sort(x):
+            return (member_counts.get(x,0), ortho_counts.get(x, 0))
+    else:
+        def _sort(x):
+            return (ortho_counts.get(x, 0), member_counts.get(x,0))
+    
+    if group_by & _GROUP_MEMBERSHIP:
         group_patterns = dict()
         group_counts = dict()
-        if group_by & _MULTIPLES:
+        if group_by & _GROUP_MULTIPLES:
             for pattern in ortho_counts:
                 _pattern = tuple(sorted(pattern))
-                _count = _pattern.count('M')
+                _nmulti = _pattern.count('M')
+                _counts = _sort(pattern)
                 if _count not in group_patterns:
-                    group_patterns[_count] = dict()
-                    group_counts[_count] = 0
-                group_patterns[_count][pattern] = ortho_counts[pattern]
-                group_counts[_count] += ortho_counts[pattern]
+                    group_patterns[_nmulti] = dict()
+                    group_counts[_nmulti] = [0,0]
+                group_patterns[_nmulti][pattern] = _counts
+                group_counts[_nmulti][0] += _counts[0]
+                group_counts[_nmulti][1] += _counts[1]
         else:
             for pattern in ortho_counts:
                 _pattern = tuple(sorted(pattern))
+                _counts = _sort(pattern)
                 if _pattern not in group_patterns:
                     group_patterns[_pattern] = dict()
-                    group_counts[_pattern] = 0
-                group_patterns[_pattern][pattern] = ortho_counts[pattern]
-                group_counts[_pattern] += ortho_counts[pattern]
+                    group_counts[_pattern] = [0,0]
+                group_patterns[_pattern][pattern] = _counts
+                group_counts[_pattern][0] += _counts[0]
+                group_counts[_pattern][1] += _counts[1]
 
         for _pattern in sorted(group_patterns, key=group_counts.get, reverse=True):
-            output.write("##total=%d\n" % group_counts[_pattern])
+            output.write("##total=%d\n" % group_counts[_pattern][0])
             for pattern in sorted(group_patterns[_pattern], key=group_patterns[_pattern].get, reverse=True):
                 output.write(
                     _TAB.join((
@@ -230,7 +252,8 @@ def main(argv):
                     )) + _EOL
                 )
     else:
-        for pattern in sorted(ortho_counts, key=ortho_counts.get, reverse=True):
+        
+        for pattern in sorted(ortho_counts, key=_sort, reverse=True):
             output.write(
                 _TAB.join((
                     _SPACE.join(pattern),
