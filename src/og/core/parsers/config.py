@@ -1,5 +1,5 @@
 
-import yaml
+import yaml  # requires PyYAML specifically: https://pypi.org/project/PyYAML
 
 from math import inf as _POS_INF
 from og.core.parsers.bed import BEDNameMapFile

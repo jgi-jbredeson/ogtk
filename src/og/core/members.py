@@ -16,12 +16,12 @@ def int_placed(record, is_placed=_placed, ignore_unplaced=False):
 def map_locus_to_sequence(locus_name, namemap, is_placed=_placed):
     if locus_name not in namemap.loci:
         raise KeyError(
-            "Locus name not found in loci: %s" % locus_name
+            "Locus name not found in loci:" + str(locus_name)
         )
     sequence_name = namemap.loci[locus_name].chr
     if sequence_name not in namemap.references:
         raise KeyError(
-            "Sequence name not found in references: %s" % sequence_name
+            "Sequence name not found in references: " + str(sequence_name)
         )
     sequence_record = namemap.references[sequence_name]
     if is_placed(sequence_record):
