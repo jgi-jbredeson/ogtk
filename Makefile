@@ -90,20 +90,20 @@ $(LIB_DIR):
 	@$(MKDIR_P) $@
 
 $(BIN_DIR)/%: $(SCRIPT_DIR)/%.py
-	@$(AWK) 'BEGIN{print "#!/usr/bin/env python3"} {print "#",$$_}' $(LICENSE) | $(CAT) - $< | \
+	@$(AWK) 'BEGIN{print "#!/usr/bin/env python3"} {print "#",$$0}' $(LICENSE) | $(CAT) - $< | \
 		$(SED) "s/__PACKAGE_NAME__/$(PACKAGE)/;s/__PACKAGE_VERSION__/$(VERSION)/;s/__PACKAGE_CONTACT__/$(CONTACT)/" >$@
 
 $(BIN_DIR)/%: $(SCRIPT_DIR)/%.sh
-	@$(AWK) 'BEGIN{print "#!/usr/bin/env bash"} {print "#",$$_}' $(LICENSE) | $(CAT) - $< | \
+	@$(AWK) 'BEGIN{print "#!/usr/bin/env bash"} {print "#",$$0}' $(LICENSE) | $(CAT) - $< | \
 		$(SED) "s/__PACKAGE_NAME__/$(PACKAGE)/;s/__PACKAGE_VERSION__/$(VERSION)/;s/__PACKAGE_CONTACT__/$(CONTACT)/" >$@
 
 $(BIN_DIR)/%: $(SCRIPT_DIR)/%.R
-	@$(AWK) 'BEGIN{print "#!/usr/bin/env Rscript"} {print "#",$$_}' $(LICENSE) | $(CAT) - $< | \
+	@$(AWK) 'BEGIN{print "#!/usr/bin/env Rscript"} {print "#",$$0}' $(LICENSE) | $(CAT) - $< | \
 		$(SED) "s/__PACKAGE_NAME__/$(PACKAGE)/;s/__PACKAGE_VERSION__/$(VERSION)/;s/__PACKAGE_CONTACT__/$(CONTACT)/" >$@
 
 $(LIB_DIR)/%: $(SRC_DIR)/%
 	@$(MKDIR_P) $(@D)
-	@$(AWK) 'BEGIN{print "#!/usr/bin/env python3"} {print "#",$$_}' $(LICENSE) | $(CAT) - $< | \
+	@$(AWK) 'BEGIN{print "#!/usr/bin/env python3"} {print "#",$$0}' $(LICENSE) | $(CAT) - $< | \
 		$(SED) "s/__PACKAGE_NAME__/$(PACKAGE)/;s/__PACKAGE_VERSION__/$(VERSION)/;s/__PACKAGE_CONTACT__/$(CONTACT)/" >$@
 
 $(LIB_DIR)/og/core/%: $(SUB_DIR)/%/src/%
