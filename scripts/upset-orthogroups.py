@@ -29,6 +29,31 @@ num = len
 _GROUP_MEMBERSHIP = 0x1
 _GROUP_MULTIPLES = 0x2
 _SORT_MEMBERS = 0x1
+_MULTI = '\u25CF'
+_MINUS = '\u2015'
+
+_UNICODE_NUMMAP = {
+    '1' :'\u2460',
+    '2' :'\u2461',
+    '3' :'\u2462',
+    '4' :'\u2463',
+    '5' :'\u2464',
+    '6' :'\u2465',
+    '7' :'\u2466',
+    '8' :'\u2467',
+    '9' :'\u2468',
+    '10':'\u2469',
+    '11':'\u246A',
+    '12':'\u246B',
+    '13':'\u246C',
+    '14':'\u246D',
+    '15':'\u246E',
+    '16':'\u246F',
+    '17':'\u2470',
+    '18':'\u2471',
+    '19':'\u2472',
+    '20':'\u2473',
+}
 
 
 def usage(message=None, exitcode=1, stream=sys.stderr):
@@ -41,6 +66,9 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Usage:   %s [options] <in.tsv> <in.yaml>\n" % __program__)
     stream.write("\n")
     stream.write("Options:\n")
+    stream.write("  -a,--force-ascii\n")
+    stream.write("     Force writing output in ASCII-only characters\n")
+    stream.write("\n")
     stream.write("  -g,--group-by <enum>\n")
     stream.write("     Group output by membership (=1), number of Multiples (=2)\n")
     stream.write("     (See the `--max-count` option below), or perform no grouping [0]\n")
@@ -57,8 +85,8 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     stream.write("  -M,--max-count <uint>\n")
     stream.write("     Count up to `-M` number of sequences per species and orthogroup.\n")
-    stream.write("     Counts greater than this threshold are converted to the `M` character\n")
-    stream.write("     to denote `Many` or `Multiple` [inf]\n")
+    stream.write("     Counts greater than this threshold are converted to the `%s` character\n" % _MULTI)
+    stream.write("     (or `*` if `--force-ascii` is enabled).\n")
     stream.write("\n")
     stream.write("  -n,--map-to-sequence-names\n")
     stream.write("     Map locus names to sequence names internally, then calculate upset.\n")
@@ -91,8 +119,9 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 
 
 def main(argv):
-    short_flags = 'hs:g:M:o:pniIu'
+    short_flags = 'ahs:g:M:o:pniIu'
     long_flags = (
+        'force-ascii',
         'help',
         'sort-by=',
         'group-by=',
@@ -117,9 +146,16 @@ def main(argv):
     input_seq_names = False
     output_file = STDIO
     ignore_unplaced = 0
+    multi = _MULTI
+    minus = _MINUS
+    force_ascii = False
     for flag, value in options:
-        if flag in ('-h','--help'):
+        if   flag in ('-h','--help'):
             usage(exitcode=0)
+        elif flag in ('-a','--force-ascii'):
+            force_ascii = True
+            multi = '*'
+            minus = '-'
         elif flag in ('-g','--group-by'):
             group_by |= (0x1 | int(value))
         elif flag in ('-s','--sort-by'):
@@ -186,12 +222,12 @@ def main(argv):
                     ignore_unplaced,
                     aggregate_unplaced=False
                 )
-                pattern[species_i] = 'M' if num(names) > max_count else str(num(names))
+                pattern[species_i] = minus if num(names) < 1 else multi if num(names) > max_count else str(num(names))
                 num_members += num(names)
         else:
             for species_i in range(num_species):
                 names = ortho.groups[group_i][species_i]
-                pattern[species_i] = 'M' if num(names) > max_count else str(num(names))
+                pattern[species_i] = minus if num(names) < 1 else multi if num(names) > max_count else str(num(names))
                 num_members += num(names)
 
         try:
@@ -209,6 +245,16 @@ def main(argv):
         )) + _EOL
     )
 
+    if force_ascii:
+        def _fmtchar(x):
+            return str(x)
+    else:
+        def _fmtchar(x):
+            try:
+                return _UNICODE_NUMMAP[x]
+            except KeyError:
+                return str(x)
+        
     if sort_by & _SORT_MEMBERS:
         def _sort(x):
             return (member_counts.get(x,0), ortho_counts.get(x, 0))
@@ -222,9 +268,9 @@ def main(argv):
         if group_by & _GROUP_MULTIPLES:
             for pattern in ortho_counts:
                 _pattern = tuple(sorted(pattern))
-                _nmulti = _pattern.count('M')
+                _nmulti = _pattern.count(multi)
                 _counts = _sort(pattern)
-                if _count not in group_patterns:
+                if _nmulti not in group_patterns:
                     group_patterns[_nmulti] = dict()
                     group_counts[_nmulti] = [0,0]
                 group_patterns[_nmulti][pattern] = _counts
@@ -252,11 +298,10 @@ def main(argv):
                     )) + _EOL
                 )
     else:
-        
         for pattern in sorted(ortho_counts, key=_sort, reverse=True):
             output.write(
                 _TAB.join((
-                    _SPACE.join(pattern),
+                    _SPACE.join(pattern),  # map(_fmtchar, pattern)),
                     str(ortho_counts[pattern]),
                     str(member_counts[pattern])
                 )) + _EOL
