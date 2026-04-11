@@ -68,8 +68,11 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Locus names have already been mapped to their corresponding sequence\n")
     stream.write("     names in the input orthogroups file. Perform filtering accordingly.\n")
     stream.write("\n")
+    stream.write("  -S,--count-species\n")
+    stream.write("     Instead of member counts, write 1/0 for species presence/absence\n")
+    stream.write("\n")
     stream.write("  -T,--output-totals\n")
-    stream.write("     Output member counts table with a column of row totals appended.\n")
+    stream.write("     Output counts table with a column of row totals appended.\n")
     stream.write("\n")
     stream.write("  -u,--ignore-unlocalized\n")
     stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
@@ -88,9 +91,10 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 
 
 def main(argv):
-    short_flags = 'hM:o:pniITu'
+    short_flags = 'hM:o:pSniITu'
     long_flags = (
         'help',
+        'count-species',
         'max-count=',
         'output-file=',
         'output-totals',
@@ -111,6 +115,7 @@ def main(argv):
     map_seq_names = False
     input_seq_names = False
     output_file = STDIO
+    output_counts = True
     output_totals = False
     ignore_unplaced = 0
     for flag, value in options:
@@ -126,6 +131,8 @@ def main(argv):
             max_count = int(value)
         elif flag in ('-n','--map-to-sequence-names'):
             map_seq_names = True
+        elif flag in ('-S','--count-species'):
+            output_counts = False
         elif flag in ('-p','--input-sequence-names'):
             input_seq_names = True
         elif flag in ('-i','--ignore-unplaced-leniently'):
@@ -184,19 +191,26 @@ def main(argv):
                     ignore_unplaced,
                     aggregate_unplaced=False
                 )
-                pattern[species_i] = 'M' if num(names) > max_count else str(num(names))
-                num_members += num(names)
+                if output_counts:
+                    pattern[species_i] = 'M' if num(names) > max_count else num(names)
+                    num_members += num(names)
+                else:
+                    pattern[species_i] = int(bool(names))
+                    num_members += pattern[species_i]
         else:
             for species_i in range(num_species):
                 names = ortho.groups[group_i][species_i]
-                pattern[species_i] = 'M' if num(names) > max_count else str(num(names))
-                num_members += num(names)
-
+                if output_counts:
+                    pattern[species_i] = 'M' if num(names) > max_count else num(names)
+                    num_members += num(names)
+                else:
+                    pattern[species_i] = int(bool(names))
+                    num_members += pattern[species_i]
         
         output.write(
             '%s\t%s%s\n' % (
                 ortho.ids[group_i],
-                '\t'.join(pattern),
+                '\t'.join(map(str, pattern)),
                 '\t%d' % (num_members) if output_totals else ''
             )
         )

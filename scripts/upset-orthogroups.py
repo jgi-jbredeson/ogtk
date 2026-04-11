@@ -42,17 +42,17 @@ _UNICODE_NUMMAP = {
     '7' :'\u2466',
     '8' :'\u2467',
     '9' :'\u2468',
-    '10':'\u2469',
-    '11':'\u246A',
-    '12':'\u246B',
-    '13':'\u246C',
-    '14':'\u246D',
-    '15':'\u246E',
-    '16':'\u246F',
-    '17':'\u2470',
-    '18':'\u2471',
-    '19':'\u2472',
-    '20':'\u2473',
+    # '10':'\u2469',
+    # '11':'\u246A',
+    # '12':'\u246B',
+    # '13':'\u246C',
+    # '14':'\u246D',
+    # '15':'\u246E',
+    # '16':'\u246F',
+    # '17':'\u2470',
+    # '18':'\u2471',
+    # '19':'\u2472',
+    # '20':'\u2473',
 }
 
 
@@ -70,7 +70,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Force writing output in ASCII-only characters\n")
     stream.write("\n")
     stream.write("  -g,--group-by <enum>\n")
-    stream.write("     Group output by membership (=1), number of Multiples (=2)\n")
+    stream.write("     Group output by (1) membership, (2) number of multiples\n")
     stream.write("     (See the `--max-count` option below), or perform no grouping [0]\n")
     stream.write("\n")
     stream.write("  -I,--ignore-unplaced-strictly\n")
@@ -89,7 +89,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     (or `*` if `--force-ascii` is enabled).\n")
     stream.write("\n")
     stream.write("  -n,--map-to-sequence-names\n")
-    stream.write("     Map locus names to sequence names internally, then calculate upset.\n")
+    stream.write("     Map locus names to sequence names internally, then calculate plot.\n")
     stream.write("\n")
     stream.write("  -o,--output-file <file>\n")
     stream.write("     Write output to file [stdout]\n")
@@ -99,8 +99,11 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     names in the input orthogroups file. Perform filtering accordingly.\n")
     stream.write("\n")
     stream.write("  -s,--sort-by <enum>\n")
-    stream.write("     Sort upset plot rows by number of clusters (=0) (the default) or by\n")
-    stream.write("     number of members (=1)\n")
+    stream.write("     Sort plot rows by (1) number of members or number of clusters [0]\n")
+    stream.write("     \n")
+    stream.write("\n")
+    stream.write("  -S,--upset-separator <str>\n")
+    stream.write("     Add space between columns of the upset plot using the given separator\n")
     stream.write("\n")
     stream.write("  -u,--ignore-unlocalized\n")
     stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
@@ -119,10 +122,11 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 
 
 def main(argv):
-    short_flags = 'ahs:g:M:o:pniIu'
+    short_flags = 'ahS:s:g:M:o:pniIu'
     long_flags = (
         'force-ascii',
         'help',
+        'upset-sep=',
         'sort-by=',
         'group-by=',
         'max-count=',
@@ -140,12 +144,13 @@ def main(argv):
 
     sort_by = 0
     group_by = 0
-    max_count = float('inf')
+    max_count = 0
     is_placed = _placed
     map_seq_names = False
     input_seq_names = False
     output_file = STDIO
     ignore_unplaced = 0
+    sep = _EMPTY
     multi = _MULTI
     minus = _MINUS
     force_ascii = False
@@ -156,10 +161,13 @@ def main(argv):
             force_ascii = True
             multi = '*'
             minus = '-'
+            sep = _SPACE
         elif flag in ('-g','--group-by'):
             group_by |= (0x1 | int(value))
         elif flag in ('-s','--sort-by'):
             sort_by |= int(value)
+        elif flag in ('-S','--upset-separator'):
+            sep = value.encode('utf-8').decode('unicode_escape')
         elif flag in ('-o','--output-file'):
             output_file = value
         elif flag in ('-M','--max-count'):
@@ -245,7 +253,8 @@ def main(argv):
         )) + _EOL
     )
 
-    if force_ascii:
+    if force_ascii or max_count > num(_UNICODE_NUMMAP):
+        sep = _SPACE if sep is _EMPTY else sep
         def _fmtchar(x):
             return str(x)
     else:
@@ -291,8 +300,8 @@ def main(argv):
             output.write("##total=%d\n" % group_counts[_pattern][0])
             for pattern in sorted(group_patterns[_pattern], key=group_patterns[_pattern].get, reverse=True):
                 output.write(
-                    _TAB.join((
-                        _SPACE.join(pattern),
+                    sep.join((
+                        _EMPTY.join(map(_fmtchar, pattern)),
                         str(ortho_counts[pattern]),
                         str(member_counts[pattern])
                     )) + _EOL
@@ -301,7 +310,7 @@ def main(argv):
         for pattern in sorted(ortho_counts, key=_sort, reverse=True):
             output.write(
                 _TAB.join((
-                    _SPACE.join(pattern),  # map(_fmtchar, pattern)),
+                    sep.join(map(_fmtchar, pattern)),
                     str(ortho_counts[pattern]),
                     str(member_counts[pattern])
                 )) + _EOL

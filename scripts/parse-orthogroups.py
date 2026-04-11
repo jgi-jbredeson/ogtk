@@ -24,7 +24,8 @@ __purpose__ = 'Manipulate OrthoFinder orthogroups files'
 
 _LF = '\n'
 _CR = '\r'
-
+_TWO_SPECIES_REQUIRED = \
+    "Two (and only two) species required with `--output-type A`"
 num = len
 
 
@@ -167,10 +168,8 @@ def main(argv):
             remove_species = True
         elif flag in ('-S','--species-order-file'):
             newspecies.extend(read_order_file(value))
-            newindices.update(index_list(newspecies))
         elif flag in ('-s','--species-order'):
             newspecies.extend(value.split(_COMMA))
-            newindices.update(index_list(newspecies))
         elif flag in ('-v','--orthovenn'):
             output_type = 'V'
         elif flag in ('-h','--help'):
@@ -190,10 +189,22 @@ def main(argv):
     oldspecies = ortho.species
     oldindices = index_list(oldspecies)
 
+    ogid_as_species = False
     if newspecies:
+        _newspecies = []
         for species in newspecies:
+            if species == "Orthogroup":
+                ogid_as_species = True
+                continue
             if species not in oldindices:
-                raise KeyError("Species not found in orthogroups file: `%s`" % species)
+                raise KeyError(
+                    "Species not found in orthogroups "
+                    "file: `%s`" % species
+                )
+            _newspecies.append(species)
+        
+        newspecies = _newspecies
+        newindices = index_list(newspecies)
     else:
         newspecies = oldspecies
         newindices = oldindices
@@ -204,7 +215,7 @@ def main(argv):
         newgroup = [None] * num(newspecies)
         for species in newspecies:
             newgroup[newindices[species]] = oldgroup[oldindices[species]]
-            if newgroup[newindices[species]] is None:
+            if not newgroup[newindices[species]]:
                 newgroup[newindices[species]] = tuple()
         ortho.groups[g] = newgroup
 
@@ -237,11 +248,11 @@ def main(argv):
     if output_type == 'V':
         orthogroups = []
         for g in range(num(ortho.groups)):
-            n = 0
-            for s in range(num(ortho.species)):
-                n += int(len(ortho.groups[g][s]) > 0)
-            orthogroups.append((-n, ortho.ids[g], ortho.groups[g]))
-
+            orthogroups.append((
+                -sum(map(bool, ortho.groups[g])),
+                ortho.ids[g],
+                ortho.groups[g]
+            ))
         orthogroups.sort()
 
         # output_file.write(_TAB.join(ortho.species) + _EOL)
@@ -249,11 +260,37 @@ def main(argv):
             ortho.ids[g] = orthogroups[g][1]
             ortho.groups[g] = orthogroups[g][2]
             sep = _EMPTY
+            if ogid_as_species:
+                output_file.write(ortho.ids[g])
+                sep = _TAB
             for s in range(num(ortho.species)):
                 if len(ortho.groups[g][s]) > 0:
-                    output_file.write("%s%s" % (sep, _TAB.join(ortho.groups[g][s])))
+                    output_file.write(
+                        "%s%s" % (sep, _TAB.join(ortho.groups[g][s]))
+                    )
                     sep = _TAB
             output_file.write(_LF)
+
+    elif output_type == 'A':
+        if ogid_as_species:
+            if num(ortho.species) != 1:
+                raise Exception(_TWO_SPECIES_REQUIRED)
+        elif num(ortho.species) != 2:
+            raise Exception(_TWO_SPECIES_REQUIRED)
+
+        for g in range(num(ortho.groups)):
+            if ogid_as_species:
+                species_i = (ortho.ids[g],)
+                species_j = ortho.groups[g][0]
+            else:
+                species_i = ortho.groups[g][0]
+                species_j = ortho.groups[g][1]
+
+            for member_i in species_i:
+                for member_j in species_j:
+                    output_file.write(
+                        _TAB.join((member_i, member_j)) + _LF
+                    )
     else:
         ortho.to_table(output_file)
 
