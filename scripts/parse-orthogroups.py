@@ -26,6 +26,8 @@ _LF = '\n'
 _CR = '\r'
 _TWO_SPECIES_REQUIRED = \
     "Two (and only two) species required with `--output-type A`"
+_OGID_FIELD = {'Orthogroup','OG','HOG'}
+
 num = len
 
 
@@ -193,7 +195,7 @@ def main(argv):
     if newspecies:
         _newspecies = []
         for species in newspecies:
-            if species == "Orthogroup":
+            if species in _OGID_FIELD:
                 ogid_as_species = True
                 continue
             if species not in oldindices:

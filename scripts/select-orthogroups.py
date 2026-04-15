@@ -45,6 +45,9 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Do not remove members, only exhausted orthogroups\n")
     stream.write("\n")
     stream.write("  -v,--invert\n")
+    stream.write("     Write lines that exhaust their members\n")
+    stream.write("\n")
+    stream.write("  -x,--exclude\n")
     stream.write("     Exclude members listed in list file\n")
     stream.write("\n")
     stream.write("  -h,--help\n")
@@ -57,13 +60,14 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     
     
 def main(argv):
-    short_flags = 'hL:m:s:rv'
+    short_flags = 'hL:m:s:rxv'
     long_flags = (
         'help',
         'list-file=',
         'min-members=',
         'min-species=',
         'no-remove-members',
+        'exclude',
         'invert'
     )
 
@@ -73,6 +77,7 @@ def main(argv):
         usage(error)
 
     invert = False
+    exclude = False
     keepset = []
     min_members = 1
     min_species = 1
@@ -81,7 +86,7 @@ def main(argv):
         if   flag in ('-h','--help'):
             usage(exitcode=0)
         elif flag in ('-L','--list-file'):
-            keepset = read_to_list(value)
+            keepset = set(read_to_list(value))
         elif flag in ('-m','--min-members'):
             min_members = value
         elif flag in ('-s','--min-species'):
@@ -90,6 +95,8 @@ def main(argv):
             remove_members = False
         elif flag in ('-v','--invert'):
             invert = True
+        elif flag in ('-x','--exclude'):
+            exclude = True
     try:
         min_members = int(min_members)
     except:
@@ -120,26 +127,27 @@ def main(argv):
         members_counts = [0] * num(ortho.species)
         species_counts = [0] * num(ortho.species)
 
-        orthogroup = []
+        group = []
         for s in range(num(ortho.species)):
             members = []
-            for member in ortho.groups[g][s]:
-                present = member in keepset
-                if invert:
-                    present = not present
-                if present:
-                    members.append(member)
-                present = int(present)
-                members_counts[s] += present
-                species_counts[s] = present
-            orthogroup.append(members)
-            
-        if sum(species_counts) >= min_species and \
-           sum(members_counts) >= min_members:
-            if remove_members:
-                output.groups.append(orthogroup)
-            else:
-                output.groups.append(ortho.groups[g])
+            if ortho.groups[g][s]:
+                for member in ortho.groups[g][s]:
+                    present = member in keepset
+                    if exclude:
+                        present = not present
+                    if present:
+                        members.append(member)
+                    present = int(present)
+                    members_counts[s] += present
+                    species_counts[s] = present
+            group.append(members)
+
+        passes = ((sum(species_counts) >= min_species) and
+                  (sum(members_counts) >= min_members))
+        if invert:
+            passes = not passes
+        if passes:
+            output.groups.append(group if remove_members else ortho.groups[g])
             output.ids.append(ortho.ids[g])
             
     output.to_table(sys.stdout)
