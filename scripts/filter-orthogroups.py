@@ -57,6 +57,12 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     input orthogroups table contains only unplaced (ie, non-chomosomal)\n")
     stream.write("     sequences, that cell contains members.\n")
     stream.write("\n")
+    stream.write("  -m,--min-members <uint>\n")
+    stream.write("     Minimum number of members permitted per orthogroup [1]\n")
+    stream.write("\n")
+    stream.write("  -M,--max-members <uint>\n")
+    stream.write("     Maximum number of members permitted per orthogroup [inf]\n")
+    stream.write("\n")
     stream.write("  -N,--output-sequence-names\n")
     stream.write("     Map locus names to sequence names internally, then perform filtering.\n")
     stream.write("     Write sequence names to output (use `-n` for locus names).\n")
@@ -71,6 +77,12 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("  -p,--input-sequence-names\n")
     stream.write("     Locus names have already been mapped to their corresponding sequence\n")
     stream.write("     names in the input orthogroups file. Perform filtering accordingly.\n")
+    stream.write("\n")
+    stream.write("  -s,--min-species <uint>\n")
+    stream.write("     Minimum number of species permitted per orthogroup [1]\n")
+    stream.write("\n")
+    stream.write("  -S,--max-species <uint>\n")
+    stream.write("     Maximum number of species permitted per orthogroup [inf]\n")
     stream.write("\n")
     stream.write("  -u,--ignore-unlocalized\n")
     stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
@@ -122,7 +134,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     
 
 def main(argv):
-    short_flags = 'ho:iIupNnv'
+    short_flags = 'ho:iIupm:M:Nns:S:v'
     long_flags = (
         'help',
         'output-file=',
@@ -132,6 +144,10 @@ def main(argv):
         'input-sequence-names',
         'output-sequence-names',
         'map-to-sequence-names',
+        'min-members=',
+        'max-members=',
+        'min-species=',
+        'max-species=',
         'invert-output'
     )
     try:
@@ -141,6 +157,10 @@ def main(argv):
 
     invert = False
     is_placed = _placed
+    min_members = 1
+    max_members = _POS_INF
+    min_species = 1
+    max_species = _POS_INF
     map_seq_names = None
     input_seq_names = False
     output_seq_names = False
@@ -157,10 +177,18 @@ def main(argv):
             ignore_unplaced = _STRICT
         elif flag in ('-u','--ignore-unlocalized'):
             is_placed = _localized
+        elif flag in ('-m','--min-members'):
+            min_members = int(value)
+        elif flag in ('-M','--max-members'):
+            max_members = int(value)
         elif flag in ('-N','--output-sequence-names'):
             output_seq_names = map_seq_names = True
         elif flag in ('-n','--map-to-sequence-names'):
             map_seq_names = True
+        elif flag in ('-s','--min-species'):
+            min_species = int(value)
+        elif flag in ('-S','--max-species'):
+            max_species = int(value)
         elif flag in ('-p','--input-sequence-names'):
             input_seq_names = True
         elif flag in ('-v','--invert-output'):
@@ -223,7 +251,12 @@ def main(argv):
                 species = tree.nodes[s]
                 counts[s] = num(ortho.groups[group][species_index[species.id]])
 
-        passes = True                        
+        passes = True
+        if not (min_members <= sum(counts) <= max_members):
+            passes = False
+        if not (min_species <= sum(map(bool, counts)) <= max_members):
+            passes = False
+            
         # anc = ancestor, dsc = descendant
         for anc_index, dsc_index in tree.get_edges(indices=True, reverse=True):
             dsc = tree.nodes[dsc_index]
@@ -236,6 +269,7 @@ def main(argv):
             else:
                 passes = False
 
+        
         if invert:
             passes = not passes
                 

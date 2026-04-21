@@ -39,6 +39,7 @@ CONTACT    := https:\/\/github.com\/JGI-Bioinformatics\/ogtk
 LICENSE    := LICENSE
 
 BIN_TARGETS = \
+	$(BIN_DIR)/add-singleton-orthogroups \
 	$(BIN_DIR)/cluster-orthogroups \
 	$(BIN_DIR)/count-orthogroups \
 	$(BIN_DIR)/filter-orthogroups \

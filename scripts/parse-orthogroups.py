@@ -210,16 +210,24 @@ def main(argv):
     else:
         newspecies = oldspecies
         newindices = oldindices
-            
-    ortho.species = newspecies    
+
+    _ortho = OrthoFinderOrthogroups()
+    _ortho.species = newspecies
     for g in range(num(ortho.groups)):
         oldgroup = ortho.groups[g]
         newgroup = [None] * num(newspecies)
+        passes = False
         for species in newspecies:
-            newgroup[newindices[species]] = oldgroup[oldindices[species]]
-            if not newgroup[newindices[species]]:
+            if oldgroup[oldindices[species]]:
+                newgroup[newindices[species]] = oldgroup[oldindices[species]]
+                passes = True
+            else:
                 newgroup[newindices[species]] = tuple()
-        ortho.groups[g] = newgroup
+        if passes:
+            _ortho.groups.append(newgroup)
+            _ortho.ids.append(ortho.ids[g])
+
+    ortho = _ortho
 
     if prefix_species:
         for g in range(num(ortho.groups)):
