@@ -23,7 +23,7 @@ __contact__ = '__PACKAGE_CONTACT__'
 __purpose__ = 'Assign ancestral Chordate LG identity'
 
 
-from og.core.parsers.orthogroups import OrthoFinderOrthogroups
+from og.core.parsers.orthogroups import OrthoFinderOrthogroups, Samples
 from og.core.parsers.newick import IntervalNewickTree
 from og.constants import (
     _RPAREN,
@@ -165,11 +165,13 @@ def parseLGs(LGs, specific=False):
 
 
 
-def inferLG(ortho_group, species_index, specific=False):
-    jv_code  = parseLGs(ortho_group[species_index['JV_LG']], specific)
-    bfl_code = parseLGs(ortho_group[species_index['Bfl_LG']], specific)
-    lva_code = parseLGs(ortho_group[species_index['Lva_LG']], specific)
-    sca_code = parseLGs(ortho_group[species_index['Sca_LG']], specific)
+def inferLG(samples_list, group, specific=False):
+    sample_indices = {s.id:s.index for s in sample_list}
+    
+    jv_code  = parseLGs(group[samples_index['JV_LG']], specific)
+    bfl_code = parseLGs(group[samples_index['Bfl_LG']], specific)
+    lva_code = parseLGs(group[samples_index['Lva_LG']], specific)
+    sca_code = parseLGs(group[samples_index['Sca_LG']], specific)
 
     jv_intersects_bfl = jv_code & bfl_code
     jv_intersects_lva = jv_code & lva_code
@@ -297,27 +299,24 @@ def collapseLGs(codes):
                 
 
 
-def append_species_LG_to_header(species, ortho, species_index):
-    i = num(ortho.species)
-    for _species in species:
-        ortho.species.append(_species+'_LG')
-        species_index[_species+'_LG'] = i
-        i += 1
+def append_samples_LG_to_header(ortho_samples, sample_list):
+    for sample in sample_list:
+        ortho_samples.append(sample.id + '_LG')
 
 
-def append_species_LG_to_groups(species, ortho_group, species_index):
-    for _species in species:
-        ortho_group.append(set())
-        for seq in ortho_group[species_index[_species]]:
+def append_samples_LG_to_groups(ortho_samples, sample_list, group):
+    sample_indices = {s.id:s.index for s in ortho_samples}
+    while len(group) < len(ortho_samples):
+        group.append(set())
+        
+    for sample in sample_list:
+        for member in group[sample.index]:
             try:
-                ortho_group[species_index[_species+'_LG']].add(
-                    _SEQUENCE_CODE_MAP[_species][seq]
+                group[sample_indices[sample.id + '_LG']].add(
+                    _SEQUENCE_CODE_MAP[sample.id][member]
                 )
             except KeyError:
                 pass
-        ortho_group[species_index[_species+'_LG']] = tuple(
-            ortho_group[species_index[_species+'_LG']]
-        )
     
 
 def usage(message=None, exitcode=1, stream=sys.stderr):
@@ -339,48 +338,36 @@ def RULE_BASED(argv):
         usage('Unexpected number of arguments')
     
     ortho = OrthoFinderOrthogroups(argv[0])
-
-    species_index = dict(zip(ortho.species, range(num(ortho.species))))
-    new_species = ('Bfl','Lva','Sca')
-    append_species_LG_to_header(
-        new_species,
-        ortho,
-        species_index
-    )
+    sample_list = Samples(('Bfl','Lva','Sca'))
+    append_samples_LG_to_header(ortho.samples, sample_list)
+    ortho.samples.append('Cns_LG')
+    ortho.samples.append('Comments')
     
-    ortho.species.append('Cns_LG')
-    ortho.species.append('Comments')
-    
-    for g in range(num(ortho.groups)):
-        append_species_LG_to_groups(
-            new_species,
-            ortho.groups[g],
-            species_index
-        )
+    for group in ortho.groups:
+        append_samples_LG_to_groups(ortho.samples, sample_list, group)
         
-        codes, comments = inferLG(ortho.groups[g], species_index, specific=True)
+        codes, comments = inferLG(ortho.samples, group, specific=True)
         if codes is _ambiguous:
-           codes, comments = inferLG(ortho.groups[g], species_index, specific=False)
+           codes, comments = inferLG(ortho.samples, group, specific=False)
            
         codes = sorted(collapseLGs(codes))
-
         codes = codes or _ambiguous
             
         ortho.groups[g].append((_PIPE.join(codes),))
         ortho.groups[g].append((_COMMA.join(comments),))
 
-    ortho.to_table(sys.stdout)
+    ortho.to_file(sys.stdout)
 
 
 
-def inferLGphylogenetically(ortho_group, species_index, tree, include=set(), specific=False):
+def inferLGphylogenetically(sample_indices, group, tree, include=set(), specific=False):
     if num(include) == 0:
         include = set(map(lambda node: node.id, tree.terminal_nodes))
     comments = []
     codes = [None] * num(tree.nodes)
     for dsc_index in tree.terminal_indices:
         dsc_node = tree.nodes[dsc_index]
-        codes[dsc_index] = parseLGs(ortho_group[species_index[dsc_node.id]], specific)
+        codes[dsc_index] = parseLGs(group[sample_indices[dsc_node.id]], specific)
         
     for anc_index, dsc_index in tree.get_edges(indices=True, reverse=True):
         if anc_index is None:
@@ -424,9 +411,7 @@ def PHYLOGENY_BASED(argv):
     ortho = OrthoFinderOrthogroups(argv[0])
     tree = IntervalNewickTree(argv[1])
 
-    species_index = dict(zip(ortho.species, range(num(ortho.species))))
-
-    new_species = ('Bfl','Lva','Sca')
+    sample_list = ('Bfl','Lva','Sca')
     
     outgroups = set()
     for anc_index, dsc_index in tree.get_edges(indices=True, reverse=True):
@@ -443,27 +428,19 @@ def PHYLOGENY_BASED(argv):
         else:
             crown_index = anc_index
     
-    append_species_LG_to_header(
-        new_species,
-        ortho,
-        species_index
-    )            
-    ortho.species.append('Cns_LG')
-    ortho.species.append('Comments')
+    append_samples_LG_to_header(ortho.samples, sample_list)
+    ortho.samples.append('Cns_LG')
+    ortho.samples.append('Comments')
     
-    for g in range(num(ortho.groups)):
-        append_species_LG_to_groups(
-            new_species,
-            ortho.groups[g],
-            species_index
-        )
+    for group in ortho.groups:
+        append_samples_LG_to_groups(ortho.samples, sample_list, group)
 
-        consensus, comments = inferLGphylogenetically(ortho.groups[g], species_index, tree, specific=True)
+        consensus, comments = inferLGphylogenetically(sample_indices, group, tree, specific=True)
             
-        ortho.groups[g].append(('|'.join(sorted(consensus)),))
-        ortho.groups[g].append((';'.join(comments),))
+        group.append(('|'.join(sorted(consensus)),))
+        group.append((';'.join(comments),))
 
-    ortho.to_table(sys.stdout)
+    ortho.to_file(sys.stdout)
 
 
 

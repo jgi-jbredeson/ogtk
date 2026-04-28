@@ -25,12 +25,12 @@ def main(argv):
                 for chr_i in ortho.groups[g][i]:
                     if chr_i is None:
                         continue
-                    if _UNPLACED.search(chr_i[len(ortho.species[i]):]):
+                    if _UNPLACED.search(chr_i[len(ortho.species[i].id):]):
                         continue
                     for chr_j in ortho.groups[g][j]:
                         if chr_j is None:
                             continue
-                        if _UNPLACED.search(chr_j[len(ortho.species[j]):]):
+                        if _UNPLACED.search(chr_j[len(ortho.species[j].id):]):
                             continue
                         
                         if chr_i not in M:

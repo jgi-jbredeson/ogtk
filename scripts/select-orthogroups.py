@@ -38,8 +38,8 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("  -m,--min-members <int>\n")
     stream.write("     Minimum number of members per orthogroup [1]\n")
     stream.write("\n")
-    stream.write("  -s,--min-species <int>\n")
-    stream.write("     Minimum number of species per orthogroup [1]\n")
+    stream.write("  -s,--min-samples <int>\n")
+    stream.write("     Minimum number of samples per orthogroup [1]\n")
     stream.write("\n")
     stream.write("  -r,--no-remove-members\n")
     stream.write("     Do not remove members, only exhausted orthogroups\n")
@@ -65,7 +65,7 @@ def main(argv):
         'help',
         'list-file=',
         'min-members=',
-        'min-species=',
+        'min-samples=',
         'no-remove-members',
         'exclude',
         'invert'
@@ -78,9 +78,9 @@ def main(argv):
 
     invert = False
     exclude = False
-    keepset = []
+    keepset = set()
     min_members = 1
-    min_species = 1
+    min_samples = 1
     remove_members = True
     for flag, value in options:
         if   flag in ('-h','--help'):
@@ -89,8 +89,8 @@ def main(argv):
             keepset = set(read_to_list(value))
         elif flag in ('-m','--min-members'):
             min_members = value
-        elif flag in ('-s','--min-species'):
-            min_species = value
+        elif flag in ('-s','--min-samples'):
+            min_samples = value
         elif flag in ('-r','--no-remove-members'):
             remove_members = False
         elif flag in ('-v','--invert'):
@@ -102,13 +102,13 @@ def main(argv):
     except:
         usage("--min-members must be a positive integer")
     try:
-        min_species = int(min_species)
+        min_samples = int(min_samples)
     except:
-        usage("--min-species must be a positive integer")
+        usage("--min-samples must be a positive integer")
     if min_members < 1:
         usage("--min-members must be a positive integer")
-    if min_species < 1:
-        usage("--min-species must be a positive integer")
+    if min_samples < 1:
+        usage("--min-samples must be a positive integer")
         
     if num(arguments) == 0:
         usage()
@@ -116,41 +116,36 @@ def main(argv):
         usage('Unexpected number of arguments')
     
     ortho = OrthoFinderOrthogroups(arguments[0])
+    output = OrthoFinderOrthogroups(samples=ortho.samples)
     
-    speciesA_index = index_list(ortho.species)
-    groupsA_index = index_list(ortho.ids)
+    for old_group in ortho.groups:
+        member_counts = [0] * num(ortho.samples)
+        sample_counts = [0] * num(ortho.samples)
 
-    output = OrthoFinderOrthogroups()
-    output.species = ortho.species
-
-    for g in range(num(ortho.groups)):
-        members_counts = [0] * num(ortho.species)
-        species_counts = [0] * num(ortho.species)
-
-        group = []
-        for s in range(num(ortho.species)):
+        new_group = output.new_group(append=False)
+        new_group.id = old_group.id
+        for sample in ortho.samples:
             members = []
-            if ortho.groups[g][s]:
-                for member in ortho.groups[g][s]:
+            if old_group[sample.index]:
+                for member in old_group[sample.index]:
                     present = member in keepset
                     if exclude:
                         present = not present
                     if present:
                         members.append(member)
                     present = int(present)
-                    members_counts[s] += present
-                    species_counts[s] = present
-            group.append(members)
+                    member_counts[sample.index] += present
+                    sample_counts[sample.index] |= present
+            new_group[sample.index] = members
 
-        passes = ((sum(species_counts) >= min_species) and
-                  (sum(members_counts) >= min_members))
+        passes = ((sum(sample_counts) >= min_samples) and
+                  (sum(member_counts) >= min_members))
         if invert:
             passes = not passes
         if passes:
-            output.groups.append(group if remove_members else ortho.groups[g])
-            output.ids.append(ortho.ids[g])
+            output.groups.append(new_group if remove_members else old_group)
             
-    output.to_table(sys.stdout)
+    output.to_file(sys.stdout)
 
 
 if __name__ == '__main__':

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # using python3 ensures unlimited max integer (>> 2**63 - 1)
 
-# TODO: Using -n behaves like -N, fix this.
 # TODO: write up phylogenetic grouping algorithm:
 #       - single-chromosome mismatches (fissions/fusions)
 #       - consistent (sub-)clade patterns (= translocations; will tend to have few counts)
@@ -15,12 +14,11 @@ import re
 import getopt
 
 from math import inf as _POS_INF
-from og.core.utils import index_list
 from og.core.members import _LENIENT, _STRICT
 from og.core.members import map_loci_to_sequences
 from og.core.members import filter_unplaced_sequences
 from og.core.compression import is_stream
-from og.core.parsers.config import SpeciesConfigFile
+from og.core.parsers.config import SampleConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr as _localized
 from og.core.parsers.assembly_report import is_placed as _placed
@@ -107,7 +105,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     stream.write("Options:\n")
     # stream.write("  -b,--locus-bed-table <file>\n")
-    # stream.write("     Table of species ID and BED path\n")
+    # stream.write("     Table of sample ID and BED path\n")
     stream.write("\n")
     stream.write("  -c,--output-cluster-counts-file <file>\n")
     stream.write("     Write distinct cluster patterns with counts to file.\n")
@@ -160,11 +158,11 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Map locus names to sequence names internally, then perform clustering.\n")
     stream.write("     Write locus names to output (use `-N` for sequence names).\n")
     stream.write("\n")    
-    stream.write("  -s,--min-species <uint>\n")
-    stream.write("     Minimum number of species permitted per orthogroup [2]\n")
+    stream.write("  -s,--min-samples <uint>\n")
+    stream.write("     Minimum number of samples permitted per orthogroup [2]\n")
     stream.write("\n")
-    stream.write("  -S,--max-species <uint>\n")
-    stream.write("     Maximum number of species permitted per orthogroup [inf]\n")
+    stream.write("  -S,--max-samples <uint>\n")
+    stream.write("     Maximum number of samples permitted per orthogroup [inf]\n")
     stream.write("\n")
     stream.write("  -u,--ignore-unlocalized\n")
     stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
@@ -182,9 +180,9 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     # stream.write("  2. The newick-str argument is a Newick-formatted tree string that can be\n")
     # stream.write("     written to filter orthogroups by conditioning on the number of members\n")
-    # stream.write("     (locus or sequence IDs) and species at each leaf node and internal\n")
+    # stream.write("     (locus or sequence IDs) and sample at each leaf node and internal\n")
     # stream.write("     node, respectively. In place of Newick branch lengths, however, the\n")
-    # stream.write("     admissible number of members and species are specified using unsigned\n")
+    # stream.write("     admissible number of members and sample are specified using unsigned\n")
     # stream.write("     integer number ranges, consisting (inclusively) of the minimum number,\n")
     # stream.write("     a dash (`-`), then maximum number without any intervening whitespace.\n")
     # stream.write("     The minimum or maximum may be omitted to specify open ranges.\n")
@@ -193,20 +191,20 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     # stream.write("     Leaf node A must have one, and exactly one, member present; leaf node\n")
     # stream.write("     B may have up to four members (inclusive); the A+B subclade (here,\n")
     # stream.write("     represented as an internal node) requires one-to-two (inclusive)\n")
-    # stream.write("     species to be be present. Leaf node C must be present at most once.\n")
+    # stream.write("     sample to be be present. Leaf node C must be present at most once.\n")
     # stream.write("     The number of members on leaf node D is unrestricted; and subclade C+D\n")
-    # stream.write("     requires at least one species be present. Because of the two subclade-\n")
-    # stream.write("     specific constraints, the two-to-four species required at the root\n")
+    # stream.write("     requires at least one sample be present. Because of the two subclade-\n")
+    # stream.write("     specific constraints, the two-to-four sample required at the root\n")
     # stream.write("     will always also be satisfied.\n")
     # #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
     # #            0        10        20        30        40        50        60        70        80
     # stream.write("\n")
-    # stream.write("  3. A locus BED table is a two-column file specifying the species IDs\n")
+    # stream.write("  3. A locus BED table is a two-column file specifying the sample IDs\n")
     # stream.write("     (same as used in the Orthogroups.tsv header) and paths to locus BED\n")
     # stream.write("     files. The BED files must contain locus IDs in fourth column and the\n")
-    # stream.write("     species IDs prepended to the sequence names (e.g., Hsa1 for chromosomes\n")
+    # stream.write("     sample IDs prepended to the sequence names (e.g., Hsa1 for chromosomes\n")
     # stream.write("     and HsaSca123 or HsaUn123 for unplaced scaffolds). If a locus BED table\n")
-    # stream.write("     is given, then the number of sequences per species is counted as the\n")
+    # stream.write("     is given, then the number of sequences per sample is counted as the\n")
     # stream.write("     members rather than locus IDs.\n")
     # stream.write("\n")
     stream.write("\n%s" % message)
@@ -224,8 +222,8 @@ def main(argv):
         'max-members=',
         'min-orthogroups',
         'max-orthogroups',
-        'min-species=',
-        'max-species=',
+        'min-samples=','min-species=',
+        'max-samples=','max-species=',
         'min-distance=',
         'max-distance=',
         'output-cluster-counts-file-all=',
@@ -243,8 +241,8 @@ def main(argv):
     max_dist = 1.0
     min_members = 2
     max_members = _POS_INF
-    min_species = 2
-    max_species = _POS_INF
+    min_samples = 2
+    max_samples = _POS_INF
     min_orthogroups = 1
     max_orthogroups = _POS_INF
     cluster_map_file = False
@@ -271,10 +269,10 @@ def main(argv):
             min_orthogroups = int(float(value))
         elif flag in ('-G','--max-orthogroups'):
             max_orthogroups = int(float(value))
-        elif flag in ('-s','--min-species'):
-            min_species = int(float(value))
-        elif flag in ('-S','--max-species'):
-            max_species = int(float(value))
+        elif flag in ('-s','--min-samples','--min-species'):
+            min_samples = int(float(value))
+        elif flag in ('-S','--max-samples','--max-species'):
+            max_samples = int(float(value))
         elif flag in ('-d','--min-distance'):
             min_dist = float(value)
         elif flag in ('-D','--max-distance'):
@@ -289,47 +287,48 @@ def main(argv):
             cluster_counts_mrg_file = open(value, 'wt');
         elif flag in ('-F','--output-cluster-map-file'):
             cluster_map_file = open(value, 'wt')
-        
+
     if num(arguments) != 2:
         usage('Unexpected number of arguments')
 
-    ortho  = OrthoFinderOrthogroups(arguments[0])
-    config = SpeciesConfigFile(arguments[1], load_files=True, map_assigned_molecule=True)
+    loc_ortho  = OrthoFinderOrthogroups(arguments[0])
+    config = SampleConfigFile(arguments[1], load_files=True, map_assigned_molecule=True)
     clust  = config.tree['ploidy']
     ofile  = sys.stdout
 
-    num_species = num(ortho.species)
-    species_index = index_list(ortho.species)
+    num_samples = num(loc_ortho.samples)
+    samples_index = {s.id:s.index for s in loc_ortho.samples}
 
     if min_dist >= 1.0:
-        min_dist = min_dist / num_species - _EPSILON
+        min_dist = min_dist / num_samples - _EPSILON
     if max_dist >= 1.0:
-        max_dist = max_dist / num_species + _EPSILON
+        max_dist = max_dist / num_samples + _EPSILON
 
-    locus = ortho
     if map_seq_names:
-        for species_id in ortho.species:
-            if species_id not in config.species:
-                raise KeyError("Species not found in conf file: '%s'" % (
-                    str(species_id)
-                ))
-
-        ortho = OrthoFinderOrthogroups()
-        ortho.species = locus.species
-        ortho.ids = locus.ids
-        ortho.groups = [None] * num(locus.groups)
-        for group in range(num(locus.groups)):
-            ortho.groups[group] = [None] * num_species
-            for i in range(num_species):
-                sequences = map_loci_to_sequences(
-                    locus.groups[group][i],
-                    config.species[locus.species[i]],
-                    is_placed,
-                    ignore_unplaced
+        for sample in loc_ortho.samples:
+            if sample.id not in config.samples:
+                raise KeyError(
+                    "Sample not found in conf file: '%s'" % str(sample.id)
                 )
-                ortho.groups[group][i] = \
-                    sorted(sequences, key=sequences.get, reverse=True)
-    
+
+        seq_ortho = OrthoFinderOrthogroups(samples=loc_ortho.samples)
+        # ortho.samples = loc_ortho.samples
+        # ortho.ids = loc_ortho.ids
+        # ortho.groups = [None] * num(loc_ortho.groups)
+        for loc_group in loc_ortho.groups:
+            # ortho.groups[group] = [None] * num_samples
+            seq_group = seq_ortho.new_group(append=True)
+            for sample in loc_ortho.samples:
+                seq_group[sample.index] = \
+                    list(map_loci_to_sequences(
+                        loc_group[sample.index],
+                        config.samples[sample.id],
+                        is_placed,
+                        ignore_unplaced
+                    ))
+        ortho = seq_ortho
+    else:
+        ortho = loc_ortho
     # TODO:
     #  Instead of using strings in sets, index gene-containing sequences
     #  into bit arrays and use std set operations. Must use numpy.array,
@@ -350,7 +349,7 @@ def main(argv):
     #      if refidx[refname] >= 63:
     #          register += 1
     #      a1[register] |= i[0] << (refidx[refname] - 63 * register)
-    #  refmap[species][chr] = (register, )
+    #  refmap[sample][chr] = (register, )
     #  
     # mask64 = ctypes.c_uint64(~0).value
     # 
@@ -367,13 +366,13 @@ def main(argv):
 
     num_distinct_patterns = 0
     for i in range(num(ortho.groups)):
-        pattern_incl_unanchored = ortho.groups[i]
-        pattern_excl_unanchored = [tuple()] * num_species
-        for j in range(num_species):
-            pattern_excl_unanchored[j] = tuple(sorted(
-                filter_unplaced_sequences(
-                    pattern_incl_unanchored[j],
-                    config.species[ortho.species[j]],
+        pattern_incl_unanchored = tuple(map(tuple, ortho.groups[i]))
+        pattern_excl_unanchored = [tuple()] * num_samples
+        for sample in ortho.samples:
+            pattern_excl_unanchored[sample.index] = \
+                tuple(sorted(filter_unplaced_sequences(
+                    pattern_incl_unanchored[sample.index],
+                    config.samples[sample.id],
                     is_placed,
                     ignore_unplaced,
                     aggregate_unplaced=True
@@ -429,19 +428,19 @@ def main(argv):
         distinct_patterns_as_sets[i] = set()
         
         n = 0
-        for j in range(num_species):
-            if  distinct_patterns_as_lists[i][j] is None:
-                distinct_patterns_as_lists[i][j] = set()
-                distinct_patterns_excl_unanchored[i][j] = set()
-            else:
+        for j in range(num_samples):
+            if distinct_patterns_as_lists[i][j]:
                 distinct_patterns_excl_unanchored[i][j] = set(
                     distinct_patterns_excl_unanchored[i][j]
                 )
                 n += int(num(distinct_patterns_excl_unanchored[i][j]) > 0)
+            else:
+                distinct_patterns_as_lists[i][j] = set()
+                distinct_patterns_excl_unanchored[i][j] = set()
                 
             distinct_patterns_as_sets[i].update(distinct_patterns_as_lists[i][j])
 
-        if n == num_species:
+        if n == num_samples:
             # patterns with complete chromosome membership are de facto their
             # own and complete clusters and require no further clustering.
             pattern = _as_tuples(distinct_patterns_excl_unanchored[i])
@@ -464,8 +463,8 @@ def main(argv):
 
     print('Num input orthogroups:', num(ortho.groups), file=_STDERR)
     print('Num distinct patterns:', num_distinct_patterns, file=_STDERR)
-    print('Num placed (species complete):', num(clustered_pattern_representatives), file=_STDERR)
-    print('Sum placed (species complete):', sum(clustered_pattern_counts.values()), file=_STDERR)
+    print('Num placed (samples complete):', num(clustered_pattern_representatives), file=_STDERR)
+    print('Sum placed (samples complete):', sum(clustered_pattern_counts.values()), file=_STDERR)
 
 
     # Iterate through patterns at the bottom of the distinct_patterns_ranked
@@ -552,8 +551,8 @@ def main(argv):
     ## OUTPUT CLUSTERS
     ############################################################################
     
-    print('Num placed (species missing):', P, file=_STDERR)
-    print('Sum placed (species missing):', sum(partial_pattern_counts.values()), file=_STDERR)
+    print('Num placed (samples missing):', P, file=_STDERR)
+    print('Sum placed (samples missing):', sum(partial_pattern_counts.values()), file=_STDERR)
     print('Num multiple best match:', m, file=_STDERR)
     print('Sum multiple best match:', M, file=_STDERR)
     print('Num unplaced (mismatches):', u, file=_STDERR)

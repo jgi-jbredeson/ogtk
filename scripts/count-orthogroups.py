@@ -18,7 +18,7 @@ from og.core.members import _LENIENT, _STRICT
 from og.core.members import map_loci_to_sequences
 from og.core.members import filter_unplaced_sequences
 from og.core.compression import open, STDIO
-from og.core.parsers.config import SpeciesConfigFile
+from og.core.parsers.config import SampleConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr as _localized
 from og.core.parsers.assembly_report import is_placed as _placed
@@ -54,12 +54,11 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     sequences, that cell contains members.\n")
     stream.write("\n")
     stream.write("  -M,--max-count <uint>\n")
-    stream.write("     Count up to `-M` number of sequences per species and orthogroup.\n")
-    stream.write("     Counts greater than this threshold are converted to the `M` character\n")
-    stream.write("     to denote `Many` or `Multiple` [inf]\n")
+    stream.write("     Count up to `-M` number of sequences per sample and orthogroup.\n")
+    stream.write("     Counts greater than this threshold are converted to the `*` character.\n")
     stream.write("\n")
     stream.write("  -n,--map-to-sequence-names\n")
-    stream.write("     Map locus names to sequence names internally, then calculate upset.\n")
+    stream.write("     Map locus names to sequence names internally, then calculate counts.\n")
     stream.write("\n")
     stream.write("  -o,--output-file <file>\n")
     stream.write("     Write output to file [stdout]\n")
@@ -68,8 +67,8 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Locus names have already been mapped to their corresponding sequence\n")
     stream.write("     names in the input orthogroups file. Perform filtering accordingly.\n")
     stream.write("\n")
-    stream.write("  -S,--count-species\n")
-    stream.write("     Instead of member counts, write 1/0 for species presence/absence\n")
+    stream.write("  -S,--count-samples\n")
+    stream.write("     Instead of member counts, write 1/0 for sample presence/absence\n")
     stream.write("\n")
     stream.write("  -T,--output-totals\n")
     stream.write("     Output counts table with a column of row totals appended.\n")
@@ -94,7 +93,7 @@ def main(argv):
     short_flags = 'hM:o:pSniITu'
     long_flags = (
         'help',
-        'count-species',
+        'count-samples','count-species',
         'max-count=',
         'output-file=',
         'output-totals',
@@ -131,7 +130,7 @@ def main(argv):
             max_count = int(value)
         elif flag in ('-n','--map-to-sequence-names'):
             map_seq_names = True
-        elif flag in ('-S','--count-species'):
+        elif flag in ('-S','--count-samples','--count-species'):
             output_counts = False
         elif flag in ('-p','--input-sequence-names'):
             input_seq_names = True
@@ -150,66 +149,61 @@ def main(argv):
         usage('Unexpected number of arguments')
 
     ortho  = OrthoFinderOrthogroups(arguments[0])
-    config = SpeciesConfigFile(arguments[1], load_files=True, map_assigned_molecule=True)
+    config = SampleConfigFile(arguments[1], load_files=True, map_assigned_molecule=True)
     output = open(output_file, 'w')
     
-    for species_id in ortho.species:
-        if species_id not in config.species:
-            raise KeyError("Species not found in YAML file: '%s'" % (
-                str(species_id)
-            ))
+    for sample in ortho.samples:
+        if sample.id not in config.samples:
+            raise KeyError(
+                "Sample not found in YAML file: '%s'" % str(sample.id)
+            )
 
     totals_label = ['Total'] if output_totals else []
-    output.write('\t'.join(['Orthogroup'] + ortho.species + totals_label) + '\n')
-    member_counts = dict()
-    ortho_counts = dict()
-    num_species = num(ortho.species)
-    for group_i in range(num(ortho.groups)):
+    output.write(
+        '\t'.join(
+            ['Orthogroup'] + [s.id for s in ortho.samples] + totals_label
+        ) + '\n'
+    )
+    for group in ortho.groups:
         num_members = 0
-        pattern = [0] * num_species
-        sequence_names = [None] * num_species
+        pattern = [0] * num(ortho.samples)
+        sequence_names = [None] * num(ortho.samples)
         if map_seq_names:
-            for species_i in range(num_species):
-                sequence_names[species_i] = map_loci_to_sequences(
-                    ortho.groups[group_i][species_i],
-                    config.species[ortho.species[species_i]],
-                    is_placed,
-                    ignore_unplaced=False
-                )
+            for sample in ortho.samples:
+                sequence_names[sample.index] = \
+                    map_loci_to_sequences(
+                        group[sample.index],
+                        config.samples[sample.id],
+                        is_placed,
+                        ignore_unplaced=False
+                    )
         else:  # either loci or pre-mapped sequences:
-            for species_i in range(num_species):
-                sequence_names[species_i] = count_items(
-                    ortho.groups[group_i][species_i]
-                )
-                 
-        if input_seq_names or map_seq_names:
-            for species_i in range(num_species):
-                names = filter_unplaced_sequences(
-                    sequence_names[species_i],
-                    config.species[ortho.species[species_i]],
+            for sample in ortho.samples:
+                sequence_names[sample.index] = \
+                    count_items(
+                        group[sample.index]
+                    )
+
+        for sample in ortho.samples:
+            if input_seq_names or map_seq_names:            
+                members = filter_unplaced_sequences(
+                    sequence_names[sample.index],
+                    config.samples[sample.id],
                     is_placed,
                     ignore_unplaced,
                     aggregate_unplaced=False
                 )
-                if output_counts:
-                    pattern[species_i] = 'M' if num(names) > max_count else num(names)
-                    num_members += num(names)
-                else:
-                    pattern[species_i] = int(bool(names))
-                    num_members += pattern[species_i]
-        else:
-            for species_i in range(num_species):
-                names = ortho.groups[group_i][species_i]
-                if output_counts:
-                    pattern[species_i] = 'M' if num(names) > max_count else num(names)
-                    num_members += num(names)
-                else:
-                    pattern[species_i] = int(bool(names))
-                    num_members += pattern[species_i]
+            else:
+                members = group[sample.index]
+
+            n = num(members) if output_counts else int(bool(members))
+            
+            pattern[sample.index] = '*' if n > max_count else n
+            num_members += n                
         
         output.write(
             '%s\t%s%s\n' % (
-                ortho.ids[group_i],
+                group.id,
                 '\t'.join(map(str, pattern)),
                 '\t%d' % (num_members) if output_totals else ''
             )

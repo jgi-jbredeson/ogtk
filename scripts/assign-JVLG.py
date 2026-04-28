@@ -3,6 +3,7 @@
 import os
 import sys
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
+
 # with edits from Dan to correct some errors, and to add 'Group 1or2' and 'Group 13or14' for two ambiguous cases.
 
 __authors__ = 'Jessen V. Bredeson, Daniel S. Rokhsar'
@@ -503,26 +504,26 @@ def main(argv):
     ortho = OrthoFinderOrthogroups(argv[0])
     prefix = argv[1]
 
+    samples = [s.id for s in ortho.samples]
+    
     lab = (0, 1, 'M')
     OGs = (
-        OrthoFinderOrthogroups(),
-        OrthoFinderOrthogroups(),
-        OrthoFinderOrthogroups()
+        OrthoFinderOrthogroups(samples=(samples + ['JV_N','JV_LG'])),
+        OrthoFinderOrthogroups(samples=(samples + ['JV_N','JV_LG'])),
+        OrthoFinderOrthogroups(samples=(samples + ['JV_N','JV_LG']))
     )
-    for og in OGs:
-        og.species = ortho.species + ['JV_N','JV_LG']
     
-    for g in range(num(ortho.groups)):
-        group = set()
-        for s in range(num(ortho.species)):
-            group.update(set(ortho.groups[g][s]))
+    for group in ortho.groups:
+        group_set = set()
+        for sample in ortho.samples:
+            group_set.update(group[sample.index])
 
         membership_letters = []
         membership_numbers = []
         for lg in AncLG:
             for conditions in AncLG[lg][1:]:
-                if ((group & conditions[0]) and (group & conditions[1])):
-                    if num(conditions) > 2 and group & conditions[2]:
+                if ((group_set & conditions[0]) and (group_set & conditions[1])):
+                    if (num(conditions) > 2 and (group_set & conditions[2])):
                         continue
                     membership_letters.append(AncLG[lg][0])
                     membership_numbers.append(lg)
@@ -533,17 +534,16 @@ def main(argv):
         if og == 0:
             membership_letters.append('NONE')
             membership_numbers.append(0)
-        
-        og.ids.append(ortho.ids[g])
-        og.groups.append(
-            ortho.groups[g] + [
-                ('|'.join(map(str, membership_numbers)),),
-                ('|'.join(membership_letters),)
-            ]
-        )
+
+        assigned = og.new_group(append=True)
+        assigned.id = group.id
+        for sample in ortho.samples:
+            assigned[sample.index] = group[sample.index]
+        assigned[-2] = ('|'.join(map(str, membership_numbers)),)
+        assigned[-1] = ('|'.join(membership_letters),)
 
     for n, og in enumerate(OGs):
-        og.to_table('%s.%s.tsv' % (prefix, lab[n]))
+        og.to_file('%s.%s.tsv' % (prefix, lab[n]))
 
         
 if __name__ == '__main__':

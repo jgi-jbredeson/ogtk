@@ -7,6 +7,7 @@ num = len
 
 from og.core.parsers.assembly_report import is_placed as _placed
 
+
 def int_placed(record, is_placed=_placed, ignore_unplaced=False):
     if ignore_unplaced and not is_placed(record):
         return -1 * int(ignore_unplaced == _LENIENT)
@@ -16,7 +17,7 @@ def int_placed(record, is_placed=_placed, ignore_unplaced=False):
 def map_locus_to_sequence(locus_name, namemap, is_placed=_placed):
     if locus_name not in namemap.loci:
         raise KeyError(
-            "Locus name not found in loci:" + str(locus_name)
+            "Locus name not found in loci: " + str(locus_name)
         )
     sequence_name = namemap.loci[locus_name].chr
     if sequence_name not in namemap.references:
@@ -42,6 +43,9 @@ def _map_loci_to_sequences(locus_names, namemap, is_placed=_placed):
 def map_loci_to_sequences(locus_names, namemap,
                           is_placed=_placed, ignore_unplaced=False):
     count = dict()
+    if not locus_names:
+        return count
+    
     for locus_name in locus_names:
         sequence_name = map_locus_to_sequence(locus_name, namemap, is_placed)
         increment_unit = int_placed(
@@ -63,6 +67,9 @@ def filter_unplaced_sequences(sequence_names, namemap, is_placed=_placed,
                               ignore_unplaced=False, aggregate_unplaced=True):
     placed = set()
     unplaced = set()
+    if not sequence_names:
+        return placed
+    
     for sequence_name in sequence_names:
         if sequence_name not in namemap.references:
             raise KeyError(

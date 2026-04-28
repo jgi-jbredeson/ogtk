@@ -28,16 +28,16 @@ def to_bool(value):
     return bool(tmpvalue)
 
 
-class _SpeciesRecord(object):
-    def __init__(self, species=None, loci=None, references=None, unplaced_id=None, is_outgroup=False):
-        self.species = species
+class _SampleRecord(object):
+    def __init__(self, sample=None, loci=None, references=None, unplaced_id=None, is_outgroup=False, species=None):
+        self.sample = sample or species
         self.loci = loci
         self.references = references
         self.unplaced_id = unplaced_id
         self.is_outgroup = is_outgroup
         
 
-class SpeciesConfigFile(object):
+class SampleConfigFile(object):
     def __init__(self, infile, load_files=False, map_assigned_molecule=False):
         self.clear()
         self.filename = None
@@ -61,41 +61,41 @@ class SpeciesConfigFile(object):
         for section in yamldata:
             if section.lower() == 'tree':
                 continue
-            else:  # a species ID
-                self.species[section] = _SpeciesRecord(species=section)
+            else:  # a sample ID
+                self.samples[section] = _SampleRecord(sample=section)
                 if 'loci' in yamldata[section]:
-                    self.species[section].loci = yamldata[section]['loci']
+                    self.samples[section].loci = yamldata[section]['loci']
                 else:
                     raise ValueError('`loci` key not defined for %s' % section)
                 
                 if 'references' in yamldata[section]:
-                    self.species[section].references = yamldata[section]['references']
+                    self.samples[section].references = yamldata[section]['references']
                 else:
                     raise ValueError('`references` key not defined for %s' % section)
                 
                 if 'unplaced_id' in yamldata[section]:
-                    self.species[section].unplaced_id = yamldata[section]['unplaced_id']
+                    self.samples[section].unplaced_id = yamldata[section]['unplaced_id']
                 else:
                     raise ValueError('`unplaced_id` key not defined for %s' % section)
                 
                 if 'outgroup' in yamldata[section]:
-                    self.species[section].is_outgroup = to_bool(str(yamldata[section]['outgroup']))
+                    self.samples[section].is_outgroup = to_bool(str(yamldata[section]['outgroup']))
 
-                if self.species[section].is_outgroup:
+                if self.samples[section].is_outgroup:
                     self._outgroup.append(section)
                 else:
                     self._ingroup.append(section)
 
 
     def load_files(self):
-        for species in self.species:
-            if isinstance(self.species[species].loci, (str, bytes)):
-                self.species[species].loci = BEDNameMapFile(
-                    self.species[species].loci
+        for sample in self.samples:
+            if isinstance(self.samples[sample].loci, (str, bytes)):
+                self.samples[sample].loci = BEDNameMapFile(
+                    self.samples[sample].loci
                 )
-            if isinstance(self.species[species].references, (str, bytes)):
-                self.species[species].references = AssemblyReportFile(
-                    self.species[species].references,
+            if isinstance(self.samples[sample].references, (str, bytes)):
+                self.samples[sample].references = AssemblyReportFile(
+                    self.samples[sample].references,
                     map_assigned_molecule=self.map_assigned_molecule
                 )
                 
@@ -123,5 +123,15 @@ class SpeciesConfigFile(object):
         self._outgroup = []
         self._ingroup = []
         self.tree = None
-        self.species = dict()
+        self.samples = dict()
         self.filename = None        
+
+        
+    @property
+    def species(self):
+        return self.samples
+
+    
+    @species.setter
+    def species(self, samples):
+        self.samples = samples

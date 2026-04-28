@@ -105,32 +105,31 @@ def main(argv):
     discard = dict()
     reassign = dict()
     preserve = dict()
-    for i in range(num(orthoP.ids)):
-        if orthoP.clusters[i][1] in ignore_groups:
+    for group in orthoP.groups:
+        if group.cluster[1] in ignore_groups:
             continue
-        if orthoP.probabilities[i][1] >= min_prob_reassign:
-            reassign[orthoP.ids[i]] = (orthoP.clusters[i][1], orthoP.probabilities[i][1])
-        # elif orthoP.probabilities[i][1] >= min_prob_preserve:
-        #     preserve[orthoP.ids[i]] = orthoP.clusters[0]
+        if group.probability[1] >= min_prob_reassign:
+            print(group.id)
+            reassign[group.id] = (group.cluster[1], group.probability[1])
 
     sortorder = dict()
-    for i in range(num(orthoM.ids)):
-        if orthoM.ids[i] in reassign:
-            orthoM.clusters[i] = reassign[orthoM.ids[i]][0]
-            orthoM.probabilities[i] = reassign[orthoM.ids[i]][1]
+    for g, group in enumerate(orthoM.groups):
+        if group.id in reassign:
+            group.cluster = reassign[group.id][0]
+            group.probability = reassign[group.id][1]
 
-        if orthoM.clusters[i] not in sortorder:
-            sortorder[orthoM.clusters[i]] = []
+        if group.cluster not in sortorder:
+            sortorder[group.cluster] = []
             
-        sortorder[orthoM.clusters[i]].append((-1*int(orthoM.counts[i]), i))
+        sortorder[group.cluster].append((-1*int(group.count), g))
 
     print(orthoM.format_orthogroups_header())
     for group_id in sortorder:
         sortorder[group_id].sort()
 
         print('%s%s' % (orthoM.grouptag, group_id))
-        for count, i in sortorder[group_id]:
-            print(orthoM.format_orthogroups_record(index=i))
+        for count, g in sortorder[group_id]:
+            print(orthoM.format_orthogroups_record(index=g))
             
 
 main(sys.argv[1:])

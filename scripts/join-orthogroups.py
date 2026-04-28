@@ -6,12 +6,11 @@ import getopt
 from math import inf as _POS_INF
 from og.core.utils import index_list
 from og.core.members import map_loci_to_sequences
-from og.core.parsers.config import SpeciesConfigFile
+from og.core.parsers.config import SampleConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr as _localized
 from og.core.parsers.assembly_report import is_placed as _placed
 from og.constants import (
-    _COLON,
     _COMMENT,
     _EMPTY,
     _EOL
@@ -28,43 +27,49 @@ num = len
 max_missing_thresh = 2
 
 
+def format_id(qry_id, trg_id, sep=':', reverse=False):
+    if reverse:
+        return str(trg_id) + sep + str(qry_id)
+    else:
+        return str(qry_id) + sep + str(trg_id)
+
+
 def format_intersection_counts_header():
-    return ("q_OG\tq_species\tq_members\t"
-            "t_OG\tt_species\tt_members\t"
-            "i_species\ti_members")
+    return ("q_OG\tq_samples\tq_members\t"
+            "t_OG\tt_samples\tt_members\t"
+            "i_samples\ti_members")
 
 
 def format_intersection_counts_record(
-        qry_id, qry_species, qry_members,
-        trg_id, trg_species, trg_members, i_species, i_members):
+        qry_id, qry_samples, qry_members,
+        trg_id, trg_samples, trg_members, i_samples, i_members):
     return "%s\t%d\t%d\t%s\t%d\t%d\t%d\t%d" % (
-        qry_id, qry_species, qry_members,
-        trg_id, trg_species, trg_members,
-        i_species, i_members
+        qry_id, qry_samples, qry_members,
+        trg_id, trg_samples, trg_members,
+        i_samples, i_members
     )
 
 
 def index_members_by_ortho_ids(ortho):
     index = dict()
     for g in range(num(ortho.groups)):
-        for s in range(num(ortho.species)):
-            if ortho.groups[g][s] is None:
+        for s in range(num(ortho.samples)):
+            if not ortho.groups[g][s]:
                 continue
             for member in ortho.groups[g][s]:
                 index[member] = g
     return index
 
 
-def get_orthoset(orthogroup):
-    orthoset = OrthoFinderOrthogroups()
-    orthoset.species = orthogroup.species
-    orthoset.ids = orthogroup.ids
-
-    for l in range(num(orthogroup.groups)):
-        orthoset.groups.append(set())
-        for i, species in enumerate(orthogroup.species):
-            if orthogroup.groups[l][i] is not None:
-                orthoset.groups[l].update(orthogroup.groups[l][i])
+def get_orthoset(ortho):
+    orthoset = OrthoFinderOrthogroups(samples=["set"])
+    for g in range(num(ortho.groups)):
+        group = orthoset.new_group(append=True)
+        group.id = ortho.groups[g].id
+        for s in range(num(ortho.samples)):
+            if not ortho.groups[g][s]:
+                continue
+            group[0].update(ortho.groups[g][s])
                 
     return orthoset
                 
@@ -106,11 +111,15 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("  -o,--output-file <file>\n")
     stream.write("     Write output to file [stdout]\n")
     stream.write("\n")
-    stream.write("  -s,--min-intersecting-species <uint>\n")
-    stream.write("     Minimum number of intersecting species permitted per orthogroup [1]\n")
+    stream.write("  -r,--reverse-id-order\n")
+    stream.write("     By default, the IDs of joined orthogroups are concatenated together\n")
+    stream.write("     as `qryOGID:trgOGID`, this option instead outputs `trgOGID:qryOGID`\n")
     stream.write("\n")
-    stream.write("  -S,--max-intersecting-species <uint>\n")
-    stream.write("     Maximum number of intersecting species permitted per orthogroup [inf]\n")
+    stream.write("  -s,--min-intersecting-samples <uint>\n")
+    stream.write("     Minimum number of intersecting samples permitted per orthogroup [1]\n")
+    stream.write("\n")
+    stream.write("  -S,--max-intersecting-samples <uint>\n")
+    stream.write("     Maximum number of intersecting samples permitted per orthogroup [inf]\n")
     stream.write("\n")
     stream.write("  -Q,--max-intersecting-queries <uint>\n")
     stream.write("     Maximum number of equally-scoring target orthogroups per query [inf]\n")
@@ -142,14 +151,14 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 
     
 def main(argv):
-    short_flags = 'haAc:ILm:M:No:Q:s:S:T:ux'
+    short_flags = 'haAc:ILm:M:No:Q:rs:S:T:ux'
     long_flags = (
         'help',
         'left-outer-join',
         'min-intersecting-members=',
         'max-intersecting-members=',
-        'min-intersecting-species=',
-        'max-intersecting-species=',
+        'min-intersecting-samples=','min-intersecting-species=',
+        'max-intersecting-samples=','max-intersecting-species=',
         'max-intersecting-queries=',
         'max-intersecting-targets=',
         'output-sequence-names',
@@ -158,7 +167,8 @@ def main(argv):
         'output-intersecting-members',
         'output-intersecting-strict',
         'output-intersecting-counts-file=',
-        'ignore-unlocalized'
+        'ignore-unlocalized',
+        'reverse-id-order',
     )
     try:
         options, arguments = getopt.getopt(argv, short_flags, long_flags)
@@ -170,10 +180,11 @@ def main(argv):
     max_queries = _POS_INF
     min_targets = 0
     max_targets = _POS_INF
+    reverse_id_order = False
     min_intersect_members = 1
     max_intersect_members = _POS_INF
-    min_intersect_species = 1
-    max_intersect_species = _POS_INF 
+    min_intersect_samples = 1
+    max_intersect_samples = _POS_INF
     left_outer_join = False
     output_seq_names = False
     output_all_best = False
@@ -190,10 +201,12 @@ def main(argv):
             min_intersect_members = int(value)
         elif flag in ('-M','--max-intersecting-members'):
             max_intersect_members = int(value)
-        elif flag in ('-s','--min-intersecting-species'):
-            min_intersect_species = int(value)
-        elif flag in ('-S','--max-intersecting-species'):
-            max_intersect_species = int(value)
+        elif flag in ('-s','--min-intersecting-samples','--min-intersecting-species'):
+            min_intersect_samples = int(value)
+        elif flag in ('-S','--max-intersecting-samples','--max-intersecting-species'):
+            max_intersect_samples = int(value)
+        elif flag in ('-r','--reverse-id-order'):
+            reverse_id_order = True
         elif flag in ('-Q','--max-intersecting-queries'):
             max_queries = int(value) 
         elif flag in ('-T','--max-intersecting-targets'):
@@ -216,141 +229,138 @@ def main(argv):
 
     qry_ortho = OrthoFinderOrthogroups(arguments[0])
     trg_ortho = OrthoFinderOrthogroups(arguments[1])
-    out_ortho = OrthoFinderOrthogroups()
         
     if output_seq_names:
         if num(arguments) != 3:
-            usage('--output-sequence-names requested, but no YAML file given')
-        config = SpeciesConfigFile(arguments[2], load_files=True, map_assigned_molecule=True)
+            usage('`--output-sequence-names` detected, but no YAML file given')
+        config = SampleConfigFile(arguments[2], load_files=True, map_assigned_molecule=True)
 
-        for species_id in qry_ortho.species:
-            if species_id not in config.species:
-                raise KeyError("Species not found in YAML file: '%s'" % (
-                    str(species_id)
-                ))
-        for species_id in trg_ortho.species:
-            if species_id not in config.species:
-                raise KeyError("Species not found in YAML file: '%s'" % (
-                    str(species_id)
-                ))
+        for sample in qry_ortho.samples:
+            if sample.id not in config.samples:
+                raise KeyError(
+                    "Sample not found in YAML file: '%s'" % str(sample.id)
+                )
+        for sample in trg_ortho.samples:
+            if sample.id not in config.samples:
+                raise KeyError(
+                    "Sample not found in YAML file: '%s'" % str(sample.id)
+                )
     else:
         config = None
     
     qry_orthoset = get_orthoset(qry_ortho)
     trg_orthoset = get_orthoset(trg_ortho)
 
-    qry_members_indices = index_members_by_ortho_ids(qry_ortho)
-    trg_members_indices = index_members_by_ortho_ids(trg_ortho)
-    
-    qry_species_indices = index_list(qry_ortho.species)
-    trg_species_indices = index_list(trg_ortho.species)
-    qry_species_counts = [sum(map(bool, g)) for g in qry_ortho.groups]
-    trg_species_counts = [sum(map(bool, g)) for g in trg_ortho.groups]
-    
-    qry_ids_indices = index_list(qry_ortho.ids)
-    trg_ids_indices = index_list(trg_ortho.ids)
+    qry_member_indices = index_members_by_ortho_ids(qry_ortho)
+    trg_member_indices = index_members_by_ortho_ids(trg_ortho)
 
-    qry_mapped_members = [0] * num(qry_ortho.groups)
-    trg_mapped_members = [0] * num(trg_ortho.groups)    
+    qry_sample_indices = {s.id:s.index for s in qry_ortho.samples}
+    trg_sample_indices = {s.id:s.index for s in trg_ortho.samples}
+    
     qry_mapped_counts = [0] * num(qry_ortho.groups)
     trg_mapped_counts = [0] * num(trg_ortho.groups)
 
-    
-    out_ortho.species = qry_ortho.species.copy()
-    new_species = sorted(
-        set(trg_ortho.species) - set(qry_ortho.species),
-        key=trg_species_indices.get
+    qry_samples = [s.id for s in qry_ortho.samples]
+    trg_samples = sorted(
+        set(s.id for s in trg_ortho.samples) - set(qry_samples),
+        key=trg_sample_indices.get
     )
-    out_ortho.species.extend(new_species)
-    
+    mrg_ortho = OrthoFinderOrthogroups(samples=(qry_samples + trg_samples))
+    mrg_sample_indices = {s.id:s.index for s in mrg_ortho.samples}
+
     intersect_counts = dict()
-    for member in qry_members_indices:
-        if member in trg_members_indices:
-            q = qry_members_indices[member]
-            t = trg_members_indices[member]
+    for member in qry_member_indices:
+        if member in trg_member_indices:
+            q = qry_member_indices[member]
+            t = trg_member_indices[member]
             
             if (q,t) in intersect_counts:
                 intersect_counts[(q,t)] += 1
             else:
                 intersect_counts[(q,t)] = 1
 
-    out_index = 0
+    mrg_index = 0
     out_counts = list()
-    qry_only_members_dict = dict()
+    qry_only_member_dict = dict()
     for q,t in sorted(intersect_counts, key=intersect_counts.get, reverse=True):
-        if (trg_mapped_counts[t] >= max_targets) or \
-           (qry_mapped_counts[q] >= max_queries):
+        if ((trg_mapped_counts[t] >= max_targets) or
+            (qry_mapped_counts[q] >= max_queries)):
             continue
         
         num_intersect_members = intersect_counts[(q,t)]
-        num_intersect_species = sum([
-            int(bool(set(qry_ortho.groups[q][s]) & trg_orthoset.groups[t])) \
-            for s in range(num(qry_ortho.species))
-        ])
+        num_intersect_samples = sum(
+            bool(qry_ortho.groups[q][s] & trg_orthoset.groups[t][0]) \
+            for s in range(num(qry_samples))
+        )
 
-        if not (min_intersect_species <= num_intersect_species <= max_intersect_species):
+        
+        if not (min_intersect_samples <= num_intersect_samples <= max_intersect_samples):
             continue
         if not (min_intersect_members <= num_intersect_members <= max_intersect_members):
             continue
 
+        mrg_group = mrg_ortho.new_group(append=True)
+        mrg_group.id = format_id(
+            qry_ortho.groups[q].id,
+            trg_ortho.groups[t].id,
+            reverse=reverse_id_order
+        )
         if output_all_members:
-            out_group = [[] for s in range(num(qry_ortho.species))]
-            for s in range(num(qry_ortho.species)):
-                qry_set = set(qry_ortho.groups[q][s])
+            for sample_id in qry_samples:
+                qs = qry_sample_indices[sample_id]
+                ms = mrg_sample_indices[sample_id]
+                mrg_group[ms] = qry_ortho.groups[q][qs] & trg_orthoset.groups[t][0]
                 
-                out_group[s] = list(qry_set & trg_orthoset.groups[t])
                 if not intersect_strict:
-                    for member in (qry_set - trg_orthoset.groups[t]):
-                        if member not in qry_only_members_dict:
-                            qry_only_members_dict[member] = []
-                        qry_only_members_dict[member].append((out_index,s))
+                    for member in (qry_ortho.groups[q][qs] - mrg_group[ms]):
+                        if member in qry_only_member_dict:
+                            qry_only_member_dict[member].append((mrg_index, ms))
+                        else:
+                            qry_only_member_dict[member] = [(mrg_index, ms)]
+                        
         else:
-            out_group = qry_ortho.groups[q].copy()
+            for sample_id in qry_samples:
+                qs = qry_sample_indices[sample_id]
+                ms = mrg_sample_indices[sample_id]
+                mrg_group[ms] = qry_ortho.groups[q][qs]
                 
-        for species in new_species:
-            out_group.append(
-                trg_ortho.groups[t][trg_species_indices[species]]
-            )
+        for sample_id in trg_samples:
+            ts = trg_sample_indices[sample_id]
+            ms = mrg_sample_indices[sample_id]
+            mrg_group[ms] = trg_ortho.groups[t][ts]
 
-        for s in range(num(qry_ortho.species)):
-            if out_group[s]:
-                for member in out_group[s]:
-                    if qry_members_indices[member] >= 0:
-                        qry_members_indices[member] = \
-                            ~qry_members_indices[member]
+        for sample_id in qry_samples:
+            ms = mrg_sample_indices[sample_id]
+            for member in mrg_group[ms]:
+                if qry_member_indices[member] >= 0:
+                    qry_member_indices[member] = \
+                        ~qry_member_indices[member]
             
-        out_ortho.groups.append(
-            out_group
-        )
-        out_ortho.ids.append(
-            qry_ortho.ids[q] + _COLON + trg_ortho.ids[t]
-        )
         out_counts.append((
-            qry_ortho.ids[q],
-            qry_species_counts[q],
-            num(qry_orthoset.groups[q]),
-            trg_ortho.ids[t],
-            trg_species_counts[t],
-            num(trg_orthoset.groups[t]),
-            num_intersect_species,
+            qry_ortho.groups[q].id,
+            qry_ortho.groups[q].num_samples,
+            qry_ortho.groups[q].num_members,
+            trg_ortho.groups[t].id,
+            trg_ortho.groups[t].num_samples,
+            trg_ortho.groups[t].num_members,
+            num_intersect_samples,
             num_intersect_members,
         ))
         
-        qry_mapped_members[q] = num_intersect_members
         qry_mapped_counts[q] += 1
         trg_mapped_counts[t] += 1
-        out_index += 1
+        mrg_index += 1
 
     # if dropped members are uniquely mapped, add them back in by back-filling:
-    for member in qry_only_members_dict:
-        if qry_members_indices[member] >= 0 and \
-           num(qry_only_members_dict[member]) == 1:
-            g,s = qry_only_members_dict[member].pop()
-            out_ortho.groups[g][s].append(member)
-            qry_members_indices[member] = \
-                ~qry_members_indices[member]
+    for member in qry_only_member_dict:
+        if qry_member_indices[member] >= 0 and \
+           num(qry_only_member_dict[member]) == 1:
+            g,s = qry_only_member_dict[member].pop()
+            mrg_ortho.groups[g][s].add(member)
+            qry_member_indices[member] = \
+                ~qry_member_indices[member]
     
-    qry_only_members_dict = None
+    qry_only_member_dict = None
 
     if left_outer_join:
         for q in range(num(qry_ortho.groups)):
@@ -358,73 +368,76 @@ def main(argv):
                 continue
 
             if output_all_members:
-                num_members = 0
-                for s in range(num(qry_ortho.species)):
-                    if qry_ortho.groups[q][s]:
-                        for member in qry_ortho.groups[q][s]:
-                            if qry_members_indices[member] >= 0:
-                                qry_members_indices[member] = \
-                                    ~qry_members_indices[member]
-                
-            out_ortho.groups.append(
-                qry_ortho.groups[q] + [()] * num(new_species)
+                for s in range(num(qry_samples)):
+                    for member in qry_ortho.groups[q][s]:
+                        if qry_member_indices[member] >= 0:
+                            qry_member_indices[member] = \
+                                ~qry_member_indices[member]
+
+            mrg_group = mrg_ortho.new_group(append=True)
+            mrg_group.id = format_id(
+                qry_ortho.groups[q].id,
+                'DISJOINT',
+                reverse=reverse_id_order
             )
-            out_ortho.ids.append(
-                qry_ortho.ids[q] + _COLON + 'DISJOINT'
-            )
+            for sample_id in qry_samples:
+                qs = qry_sample_indices[sample_id]
+                ms = mrg_sample_indices[sample_id]
+                mrg_group[ms] = qry_ortho.groups[q][qs]
+            
             out_counts.append((
-                qry_ortho.ids[q],
-                qry_species_counts[q],
-                num(qry_orthoset.groups[q]),
+                qry_ortho.groups[q].id,
+                qry_ortho.groups[q].num_samples,
+                qry_ortho.groups[q].num_members,
                 'DISJOINT',
                 0,
                 0,
-                qry_species_counts[q],
-                num(qry_orthoset.groups[q]),                
+                qry_ortho.groups[q].num_samples,
+                qry_ortho.groups[q].num_members,
             ))
-
+            mrg_index += 1
                     
         if output_all_members:
-            for q in set(filter((0).__le__, qry_members_indices.values())):
-                num_members = 0
-                out_group = [[] for s in range(num(out_ortho.species))]
-                for s in range(num(qry_ortho.species)):
-                    if qry_ortho.groups[q][s]:
-                        for member in qry_ortho.groups[q][s]:
-                            if qry_members_indices[member] >= 0:
-                                out_group[s].append(member)
-                                num_members += 1
-                if num_members:
-                    out_ortho.groups.append(
-                        out_group
-                    )
-                    out_ortho.ids.append(
-                        qry_ortho.ids[q] + _COLON + 'QRY_ONLY'
-                    )
+            for q in set(filter((0).__le__, qry_member_indices.values())):
+                mrg_group = mrg_ortho.new_group(append=False)
+                mrg_group.id = format_id(
+                    qry_ortho.groups[q].id,
+                    'QRY_ONLY',
+                    reverse=reverse_id_order
+                )
+                for sample_id in qry_samples:
+                    qs = qry_sample_indices[sample_id]
+                    ms = mrg_sample_indices[sample_id]
+                    for member in qry_ortho.groups[q][qs]:
+                        if qry_member_indices[member] >= 0:
+                            mrg_group[ms].add(member)
+
+                if mrg_group.num_members:
+                    mrg_ortho.groups.append(mrg_group)
                     out_counts.append((
-                        qry_ortho.ids[q],
-                        qry_species_counts[q],
-                        num(qry_orthoset.groups[q]),
+                        qry_ortho.groups[q].id,
+                        qry_ortho.groups[q].num_samples,
+                        qry_ortho.groups[q].num_members,
                         'QRY_ONLY',
                         0,
                         0,
-                        sum(map(bool, out_group)),
-                        num_members,                        
+                        mrg_group.num_samples,
+                        mrg_group.num_members,
                     ))
 
     if output_seq_names:
-        for g in range(num(out_ortho.groups)):
-            for s in range(num(out_ortho.species)):
-                out_ortho.groups[g][s] = sorted(
-                    map_loci_to_sequences(
-                        out_ortho.group[g][s],
-                        config.species[out_ortho.species[s]],
+        for group in mrg_ortho.groups:
+            for sample in mrg_ortho.samples:
+                group[sample.index] = \
+                    sorted(map_loci_to_sequences(
+                        group[sample.index],
+                        config.samples[sample.id],
                         is_placed,
                         ignore_unplaced=False
                     )
                 )
 
-    out_ortho.to_table(file=output_file)
+    mrg_ortho.to_file(output_file)
     
     if intersect_counts_file:
         intersect_counts_file.write(

@@ -6,7 +6,7 @@ import getopt
 from math import inf as _POS_INF
 from og.core.utils import index_list
 from og.core.members import map_loci_to_sequences
-from og.core.parsers.config import SpeciesConfigFile
+from og.core.parsers.config import SampleConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr as _localized
 from og.core.parsers.assembly_report import is_placed as _placed
@@ -105,36 +105,34 @@ def main(argv):
         usage('Unexpected number of arguments')
 
     ortho = OrthoFinderOrthogroups(arguments[0])
-    config = SpeciesConfigFile(arguments[1], load_files=True, map_assigned_molecule=True)
+    config = SampleConfigFile(arguments[1], load_files=True, map_assigned_molecule=True)
         
-    members_indices = index_members_by_ortho_ids(ortho)    
-    species_indices = index_list(ortho.species)
+    member_indices = index_members_by_ortho_ids(ortho)    
+    sample_indices = index_list(ortho.samples)
 
     singleton_count = 1
-    for species in ortho.species:
-        for locus_name in config.species[species].loci:
-            if locus_name not in members_indices:
-                group = [()] * num(ortho.species)
-                group[species_indices[species]] = (locus_name,)
-
-                ortho.groups.append(group)
-                ortho.ids.append('SGL%06d' % singleton_count)
+    for sample in ortho.samples:
+        for locus_name in config.samples[sample.id].loci:
+            if locus_name not in member_indices:
+                group = ortho.new_group(append=True)
+                group[sample.index] = (locus_name,)
+                group.id = 'SGL%06d' % singleton_count
                 singleton_count += 1
 
     if output_seq_names:
-        for g in range(num(out_ortho.groups)):
-            for s in range(num(out_ortho.species)):
-                ortho.groups[g][s] = sorted(
+        for group in ortho.groups:
+            for sample in ortho.samples:
+                group[sample.index] = sorted(
                     map_loci_to_sequences(
-                        ortho.group[g][s],
-                        config.species[ortho.species[s]],
+                        group[sample.index],
+                        config.samples[sample.id],
                         is_placed,
                         ignore_unplaced=False
                     )
                 )
 
-    ortho.to_table(file=output_file)
+    ortho.to_file(output_file)
 
-
+    
     
 main(sys.argv[1:])

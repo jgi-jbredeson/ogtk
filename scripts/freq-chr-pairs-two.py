@@ -43,12 +43,12 @@ def main(argv):
                 for chr_i in ortho.groups[g][i]:
                     if chr_i is None:
                         continue
-                    if unplaced.search(chr_i[len(ortho.species[i]):]):
+                    if unplaced.search(chr_i[len(ortho.species[i].id):]):
                         continue
                     for chr_j in ortho.groups[g][j]:
                         if chr_j is None:
                             continue
-                        if unplaced.search(chr_j[len(ortho.species[j]):]):
+                        if unplaced.search(chr_j[len(ortho.species[j].id):]):
                             continue
                         
                         if chr_i not in M:
@@ -71,10 +71,10 @@ def main(argv):
 
     C = sorted(C)  # dual purpose, sort and convert a list in one motion
     for i in range(num(ortho.species) - 1):
-        C_i = list(filter(lambda c: c.startswith(ortho.species[i]), C))
+        C_i = list(filter(lambda c: c.startswith(ortho.species[i].id), C))
         for j in range(i + 1, num(ortho.species)):
-            C_j = list(filter(lambda c: c.startswith(ortho.species[j]), C))
-            with open("%s-%s.matrix" % (ortho.species[i], ortho.species[j]), 'wt') as ofile:
+            C_j = list(filter(lambda c: c.startswith(ortho.species[j].id), C))
+            with open("%s-%s.matrix" % (ortho.species[i].id, ortho.species[j].id), 'wt') as ofile:
                 ofile.write(_TAB.join(['Species'] + C_j) + _EOL)
                 for chr_i in C_i:
                     ofile.write(chr_i)

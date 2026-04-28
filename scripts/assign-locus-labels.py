@@ -113,8 +113,8 @@ def main(argv):
     species_index = ortho.species.index(species_id)
     for group in range(num(ortho.groups)):
 
-        if ortho.ids[group] in labels:
-            label = labels[ortho.ids[group]] 
+        if ortho.groups[group].id in labels:
+            label = labels[ortho.groups[group].id]
             for locus_id in ortho.groups[group][species_index]:
                 output_file.write("%s\t%s\n" % (locus_id, label))        
     

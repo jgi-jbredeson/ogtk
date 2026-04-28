@@ -40,7 +40,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Version: %s %s\n" % (__pkgname__, __version__))
     stream.write("Contact: %s\n" % __contact__)
     stream.write("\n")
-    stream.write("Usage: %s [options] <in.tsv> <out.tsv>\n" % (
+    stream.write("Usage: %s [options] <qry.tsv> <ref.tsv>\n" % (
         os.path.basename(sys.argv[0])
     ))
     stream.write("\n")
@@ -82,62 +82,58 @@ def main(argv):
     if len(arguments) != 2:
         usage("Unexpected number of arguments")
 
+    qry_ortho = OrthoFinderOrthogroups(arguments[0])
+    ref_ortho = OrthoFinderOrthogroups(arguments[1])
 
-    ref_ortho = OrthoFinderOrthogroups(arguments[0])
-    qry_ortho = OrthoFinderOrthogroups(arguments[1])
-
-    ref_species_index = index_list(ref_ortho.species)
-    qry_species_index = index_list(qry_ortho.species)
+    qry_sample_indices = {s.id:s.index for s in qry_ortho.samples}
+    ref_sample_indices = {s.id:s.index for s in ref_ortho.samples}
 
     # 1. Every gene ID in ref_ortho has an Orthogroup ID, create a dict of
     #    these:
     member_to_orthogroup = dict()
-    for species_name, species_index in ref_species_index.items():
-        member_to_orthogroup[species_name] = dict()
+    for sample in ref_ortho.samples:
+        member_to_orthogroup[sample.id] = dict()
         
-        for group_index in range(num(ref_ortho.groups)):
-            if ref_ortho.groups[group_index][species_index] is None:
+        for group in ref_ortho.groups:
+            if not group[sample.index]:
                 continue
 
-            for member_name in ref_ortho.groups[group_index][species_index]:
-                member_to_orthogroup[species_name][member_name] = ref_ortho.ids[group_index]
+            for member in group[sample.index]:
+                member_to_orthogroup[sample.id][member] = group.id
     # 2. Iter through qry_ortho and assign orthogroup IDs given in ref_ortho
-    for group_index in range(num(qry_ortho.groups)):
-        qry_ortho.ids[group_index] = {qry_ortho.ids[group_index]: inf}
+    for group in qry_ortho.groups:
+        group.id = {group.id: inf}
 
-    for species_name, species_index in qry_species_index.items():
-        if species_name not in member_to_orthogroup:
+    for sample in qry_ortho.samples:
+        if sample.id not in member_to_orthogroup:
             continue
     
-        for group_index in range(num(qry_ortho.groups)):
-            if qry_ortho.groups[group_index][species_index] is None:
+        for group in qry_ortho.groups:
+            if not group[sample.index]:
                 continue
 
             members = []
-            for member_name in qry_ortho.groups[group_index][species_index]:
-                ogid = member_to_orthogroup[species_name].get(member_name, None)
+            for member in group[sample.index]:
+                ogid = member_to_orthogroup[sample.id].get(member, None)
                 
                 if ogid is not None:
-                    members.append(member_name + '=' + ogid)
+                    members.append(member + '=' + ogid)
     
-                if ogid in qry_ortho.groups[group_index]:
-                    qry_ortho.ids[group_index][ogid] += 1
+                if ogid in group.id:
+                    group.id[ogid] += 1
                 else:
-                    qry_ortho.ids[group_index][ogid] = 1
+                    group.id[ogid] = 1
 
             if label_members:
-                qry_ortho.groups[group_index][species_index] = members
+                group[sample.index] = members
 
         
-    for group_index in range(num(qry_ortho.groups)):
-        qry_ortho.ids[group_index] = \
-            _COMMA.join(filter(notNone, sorted(
-                qry_ortho.ids[group_index],
-                key=qry_ortho.ids[group_index].get,
-                reverse=True
-            )))
+    for group in qry_ortho.groups:
+        group.id = _COMMA.join(
+            filter(notNone, sorted(group.id,key=group.id.get,reverse=True))
+        )
 
-    qry_ortho.to_file(file=output_file)
+    qry_ortho.to_file(output_file)
 
 
 

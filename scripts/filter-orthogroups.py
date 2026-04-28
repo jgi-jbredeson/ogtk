@@ -11,15 +11,15 @@ __purpose__ = 'Filter OrthoFinder Orthogroups.tsv file'
 
 
 import sys
+import copy
 import getopt
 
 from math import inf as _POS_INF
-from og.core.utils import index_list
 from og.core.members import _LENIENT, _STRICT
 from og.core.members import map_loci_to_sequences
 from og.core.members import filter_unplaced_sequences
 from og.core.compression import is_stream
-from og.core.parsers.config import SpeciesConfigFile
+from og.core.parsers.config import SampleConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr as _localized
 from og.core.parsers.assembly_report import is_placed as _placed
@@ -78,11 +78,11 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Locus names have already been mapped to their corresponding sequence\n")
     stream.write("     names in the input orthogroups file. Perform filtering accordingly.\n")
     stream.write("\n")
-    stream.write("  -s,--min-species <uint>\n")
-    stream.write("     Minimum number of species permitted per orthogroup [1]\n")
+    stream.write("  -s,--min-samples <uint>\n")
+    stream.write("     Minimum number of samples permitted per orthogroup [1]\n")
     stream.write("\n")
-    stream.write("  -S,--max-species <uint>\n")
-    stream.write("     Maximum number of species permitted per orthogroup [inf]\n")
+    stream.write("  -S,--max-samples <uint>\n")
+    stream.write("     Maximum number of samples permitted per orthogroup [inf]\n")
     stream.write("\n")
     stream.write("  -u,--ignore-unlocalized\n")
     stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
@@ -101,9 +101,9 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     # stream.write("  2. The newick-str argument is a Newick-formatted tree string that can be\n")
     # stream.write("     written to filter orthogroups by conditioning on the number of members\n")
-    # stream.write("     (locus or sequence names) and species at each leaf node and internal\n")
+    # stream.write("     (locus or sequence names) and samples at each leaf node and internal\n")
     # stream.write("     node, respectively. In place of Newick branch lengths, however, the\n")
-    # stream.write("     admissible number of members and species are specified using unsigned\n")
+    # stream.write("     admissible number of members and samples are specified using unsigned\n")
     # stream.write("     integer number ranges, consisting (inclusively) of the minimum number,\n")
     # stream.write("     a dash (`-`), then maximum number without any intervening whitespace.\n")
     # stream.write("     The minimum or maximum may be omitted to specify open ranges.\n")
@@ -112,20 +112,20 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     # stream.write("     Leaf node A must have one, and exactly one, member present; leaf node\n")
     # stream.write("     B may have up to four members (inclusive); the A+B subclade (here,\n")
     # stream.write("     represented as an internal node) requires one-to-two (inclusive)\n")
-    # stream.write("     species to be be present. Leaf node C must be present at most once.\n")
+    # stream.write("     samples to be be present. Leaf node C must be present at most once.\n")
     # stream.write("     The number of members on leaf node D is unrestricted; and subclade C+D\n")
-    # stream.write("     requires at least one species be present. Because of the two subclade-\n")
-    # stream.write("     specific constraints, the two-to-four species required at the root\n")
+    # stream.write("     requires at least one samples be present. Because of the two subclade-\n")
+    # stream.write("     specific constraints, the two-to-four samples required at the root\n")
     # stream.write("     will always also be satisfied.\n")
     # stream.write("\n")    
     # #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
     # #            0        10        20        30        40        50        60        70        80
-    # stream.write("  3. A locus BED table is a two-column file specifying the species names\n")
+    # stream.write("  3. A locus BED table is a two-column file specifying the samples names\n")
     # stream.write("     (same as used in the Orthogroups.tsv header) and paths to locus BED\n")
     # stream.write("     files. The BED files must contain locus names in fourth column and the\n")
-    # stream.write("     species names prepended to the sequence names (e.g., Hsa1 for chromosomes\n")
+    # stream.write("     samples names prepended to the sequence names (e.g., Hsa1 for chromosomes\n")
     # stream.write("     and HsaSca123 or HsaUn123 for unplaced scaffolds). If a locus BED table\n")
-    # stream.write("     is given, then the number of sequences per species is counted as the\n")
+    # stream.write("     is given, then the number of sequences per samples is counted as the\n")
     # stream.write("     members rather than locus names.\n")
     # stream.write("\n")
     stream.write("\n%s" % message)
@@ -146,8 +146,8 @@ def main(argv):
         'map-to-sequence-names',
         'min-members=',
         'max-members=',
-        'min-species=',
-        'max-species=',
+        'min-samples=','min-species=',
+        'max-samples=','max-species=',
         'invert-output'
     )
     try:
@@ -159,8 +159,8 @@ def main(argv):
     is_placed = _placed
     min_members = 1
     max_members = _POS_INF
-    min_species = 1
-    max_species = _POS_INF
+    min_samples = 1
+    max_samples = _POS_INF
     map_seq_names = None
     input_seq_names = False
     output_seq_names = False
@@ -185,10 +185,10 @@ def main(argv):
             output_seq_names = map_seq_names = True
         elif flag in ('-n','--map-to-sequence-names'):
             map_seq_names = True
-        elif flag in ('-s','--min-species'):
-            min_species = int(value)
-        elif flag in ('-S','--max-species'):
-            max_species = int(value)
+        elif flag in ('-s','--min-samples','--min-species'):
+            min_samples = int(value)
+        elif flag in ('-S','--max-samples','--max-species'):
+            max_samples = int(value)
         elif flag in ('-p','--input-sequence-names'):
             input_seq_names = True
         elif flag in ('-v','--invert-output'):
@@ -202,59 +202,58 @@ def main(argv):
         usage('Unexpected number of arguments')
 
     ortho = OrthoFinderOrthogroups(arguments[0])
-    config = SpeciesConfigFile(arguments[1], load_files=True, map_assigned_molecule=True)
+    config = SampleConfigFile(arguments[1], load_files=True, map_assigned_molecule=True)
     tree = config.tree['ploidy']
     
-    species_index = index_list(ortho.species)
+    sample_indices = {s.id:s.index for s in ortho.samples}
 
-    for species in tree.terminal_nodes:
-        if species.id not in species_index:
-            raise KeyError("Species not found in orthologs file: '%s'" % (
-                str(species.id)
-            ))
-    for species_id in ortho.species:
-        if species_id not in config.species:
-            raise KeyError("Species not found in YAML file: '%s'" % (
-                str(species_id)
-            ))
+    for sample in tree.terminal_nodes:
+        if sample.id not in sample_indices:
+            raise KeyError(
+                "Sample not found in orthologs file: '%s'" % str(sample.id)
+            )
+    for sample in ortho.samples:
+        if sample.id not in config.samples:
+            raise KeyError(
+                "Sample not found in YAML file: '%s'" % str(sample.id)
+            )
 
-    output = OrthoFinderOrthogroups()
-    output.species = ortho.species
-    for group in range(num(ortho.groups)):
+    output = OrthoFinderOrthogroups(samples=ortho.samples)
+    for group in ortho.groups:
         counts = [0] * num(tree.nodes)
-        sequence_names = list(ortho.groups[group])
+        sequence_names = list(group)
         if map_seq_names:
-            for s in range(num(ortho.species)):
-                sequence_names[s] = map_loci_to_sequences(
-                    ortho.groups[group][s],
-                    config.species[ortho.species[s]],
-                    is_placed,
-                    ignore_unplaced
-                )
-                if output_seq_names:
-                    ortho.groups[group][s] = sorted(
-                        sequence_names[s],
-                        key=sequence_names[s].get,
-                        reverse=True
+            for sample in ortho.samples:
+                sequence_names[sample.index] = \
+                    map_loci_to_sequences(
+                        group[sample.index],
+                        config.samples[sample.id],
+                        is_placed,
+                        ignore_unplaced
                     )
-        if input_seq_names or map_seq_names:
-            for s in tree.terminal_indices:
-                species = tree.nodes[s]
-                counts[s] = num(filter_unplaced_sequences(
-                    sequence_names[species_index[species.id]],
-                    config.species[species.id],
-                    is_placed,
-                    ignore_unplaced
-                ))
-        else:
-            for s in tree.terminal_indices:
-                species = tree.nodes[s]
-                counts[s] = num(ortho.groups[group][species_index[species.id]])
+                if output_seq_names:
+                    group[sample.index] = \
+                        sequence_names[sample.index]
+
+    
+        for sample_index in tree.terminal_indices:
+            sample = tree.nodes[sample_index]
+            if input_seq_names or map_seq_names:
+                counts[sample_index] = \
+                    num(filter_unplaced_sequences(
+                        sequence_names[sample_indices[sample.id]],
+                        config.samples[sample.id],
+                        is_placed,
+                        ignore_unplaced
+                    ))
+            else:
+                counts[sample_index] = \
+                    num(group[sample_indices[sample.id]])
 
         passes = True
         if not (min_members <= sum(counts) <= max_members):
             passes = False
-        if not (min_species <= sum(map(bool, counts)) <= max_members):
+        if not (min_samples <= sum(map(bool, counts)) <= max_members):
             passes = False
             
         # anc = ancestor, dsc = descendant
@@ -264,22 +263,18 @@ def main(argv):
             if dsc.length.minimum <= counts[dsc_index] <= dsc.length.maximum:
                 if anc_index is not None:
                     counts[anc_index] += int(counts[dsc_index] > 0) \
-                        if   (dsc.id in species_index) \
+                        if   (dsc.id in sample_indices) \
                         else counts[dsc_index]
             else:
                 passes = False
 
-        
         if invert:
             passes = not passes
                 
         if passes:
-            output.groups.append(ortho.groups[group])
-            output.ids.append(ortho.ids[group])
-        elif _DEBUG:
-            sys.stderr.write(ortho.format_orthogroups_record(index=group) + _EOL)
+            output.groups.append(group)
             
-    output.to_table(output_file)
+    output.to_file(output_file)
     
     if is_stream(output_file):
         output_file.close()

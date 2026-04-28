@@ -24,9 +24,14 @@ __purpose__ = 'Manipulate OrthoFinder orthogroups files'
 
 _LF = '\n'
 _CR = '\r'
-_TWO_SPECIES_REQUIRED = \
-    "Two (and only two) species required with `--output-type A`"
+_SORT_OGIDS = 0x1
+_SORT_MEMBERS = 0x2
+_SORT_SAMPLES = 0x4
+
+_TWO_SAMPLES_REQUIRED = \
+    "Exactly two samples required with `--output-type A`"
 _OGID_FIELD = {'Orthogroup','OG','HOG'}
+
 
 num = len
 
@@ -84,11 +89,11 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     stream.write("Options:\n")
     stream.write("  -d,--prefix-delim <char>\n")
-    stream.write("     When prefixing species names to locus IDs, seperate them using char [|]\n")
+    stream.write("     When prefixing sample names to locus IDs, seperate them using char [|]\n")
     stream.write("\n")
     stream.write("  -D,--replace-delim <char>\n")
     stream.write("     To make IDs safe, replace existing specified char in locus IDs prior to\n")
-    stream.write("     prefixing species ID [|]\n")
+    stream.write("     prefixing sample ID [|]\n")
     stream.write("\n")
     stream.write("  -o,--output-file <file>\n")
     stream.write("     Write output to file [stdout]\n")
@@ -97,17 +102,22 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Output orthogroups in specified format: [F], OrthoFinder; V, OrthoVenn;\n")
     stream.write("     A, MCScan anchors format\n")
     stream.write("\n")
-    stream.write("  -p,--prefix-species-names\n")
-    stream.write("     Prepend the locus IDs with the species names declared in the header.\n")
+    stream.write("  -p,--prefix-sample-names\n")
+    stream.write("     Prepend the locus IDs with the sample names declared in the header.\n")
     stream.write("\n")
-    stream.write("  -P,--remove-species-names\n")
-    stream.write("     Remove prefixed species name {-p} and delimiter {-d} from locus IDs\n")
+    stream.write("  -P,--remove-sample-names\n")
+    stream.write("     Remove prefixed sample name {-p} and delimiter {-d} from locus IDs\n")
     stream.write("\n")
-    stream.write("  -s,--species-order <species1[,species2[,...]]>\n")
-    stream.write("     Input comma-separated list of desired output species order.\n")
+    stream.write("  -s,--sample-order <sample1[,sample2[,...]]>\n")
+    stream.write("     Input comma-separated list of desired output sample order.\n")
     stream.write("\n")    
-    stream.write("  -S,--species-order-file <file>\n")
-    stream.write("     Input file listing (one per line) the desired output species order.\n")
+    stream.write("  -S,--sample-order-file <file>\n")
+    stream.write("     Input file listing (one per line) the desired output sample order.\n")
+    stream.write("\n")
+    stream.write("  --sort-by <enum>\n")
+    stream.write("     Sort rows by (1) orthogroup IDs, numbers of (2) members or (3) samples,\n")
+    stream.write("     or maintain input sort order [0].\n")
+    stream.write("     (Negate the enumerative value to reverse sort order)\n")    
     stream.write("\n")
     stream.write("  -h,--help\n")
     stream.write("     Print this usage message\n")
@@ -122,14 +132,15 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     
 def main(argv):
     err = sys.stderr
+    sort_by = 0
     output_file = sys.stdout
     prefix_delim = '|'
     replace_delim = prefix_delim
-    prefix_species = False
-    remove_species = False
-    oldspecies = []
+    prefix_samples = False
+    remove_samples = False
+    oldsamples = []
     oldindices = {}
-    newspecies = []
+    newsamples = []
     newindices = {}
     output_type = 'F'
     valid_output_types = set('AFV')
@@ -137,12 +148,13 @@ def main(argv):
         'outfile=',
         'output-file=',
         'output-type=',
-        'species-order=',
-        'species-order-file=',
+        'sample-order=','species-order=',
+        'sample-order-file=','species-order-file=',
         'replace-delim',
         'prefix-delim=',
-        'prefix-species-names',
-        'remove-species-names',
+        'prefix-sample-names','prefix-species-names',
+        'remove-sample-names','remove-species-names',
+        'sort-by=',
         'orthovenn',
         'help'
     )
@@ -162,16 +174,18 @@ def main(argv):
             prefix_delim = value
         elif flag in ('-D','--replace-delim'):
             replace_delim = value
-        elif flag in ('-p','--prefix-species-names'):
-            prefix_species = True
-            remove_species = False
-        elif flag in ('-P','--remove-species-names'):
-            prefix_species = False
-            remove_species = True
-        elif flag in ('-S','--species-order-file'):
-            newspecies.extend(read_order_file(value))
-        elif flag in ('-s','--species-order'):
-            newspecies.extend(value.split(_COMMA))
+        elif flag in ('-p','--prefix-sample-names','--prefix-species-names'):
+            prefix_samples = True
+            remove_samples = False
+        elif flag in ('-P','--remove-sample-names','--remove-species-names'):
+            prefix_samples = False
+            remove_samples = True
+        elif flag in ('-S','--sample-order-file','--species-order-file'):
+            newsamples.extend(read_order_file(value))
+        elif flag in ('-s','--sample-order','--species-order'):
+            newsamples.extend(value.split(_COMMA))
+        elif flag in ('--sort-by',):
+            sort_by = int(value)
         elif flag in ('-v','--orthovenn'):
             output_type = 'V'
         elif flag in ('-h','--help'):
@@ -179,130 +193,125 @@ def main(argv):
 
     if output_type not in valid_output_types:
         usage("Unsupported output type: `%s`" % output_type)
-            
+    if sort_by:
+        if not (abs(sort_by) & (_SORT_OGIDS | _SORT_MEMBERS | _SORT_SAMPLES)):
+            usage("Invalid enumerative value: --sort-by=%s" % str(sort_by))
+        
     if len(arguments) != 1:
         usage("Unexpected number of arguments")
-
-    #err.write("Outputting species in the following order:\n")
-    #err.write("  %s\n" % ', '.join(newspecies))
         
     ortho = OrthoFinderOrthogroups(arguments[0])
     
-    oldspecies = ortho.species
-    oldindices = index_list(oldspecies)
+    oldsamples = [s.id for s in ortho.samples]
+    oldindices = {s.id:s.index for s in ortho.samples}
 
-    ogid_as_species = False
-    if newspecies:
-        _newspecies = []
-        for species in newspecies:
-            if species in _OGID_FIELD:
-                ogid_as_species = True
+    ogid_as_sample = False
+    if newsamples:
+        _newsamples = []
+        for sample in newsamples:
+            if sample in _OGID_FIELD:
+                ogid_as_sample = True
                 continue
-            if species not in oldindices:
+            if sample not in oldindices:
                 raise KeyError(
-                    "Species not found in orthogroups "
-                    "file: `%s`" % species
+                    "Sample not found in orthogroups "
+                    "file: `%s`" % sample
                 )
-            _newspecies.append(species)
+            _newsamples.append(sample)
         
-        newspecies = _newspecies
-        newindices = index_list(newspecies)
+        newsamples = _newsamples
+        newindices = index_list(newsamples)
     else:
-        newspecies = oldspecies
+        newsamples = oldsamples
         newindices = oldindices
 
-    _ortho = OrthoFinderOrthogroups()
-    _ortho.species = newspecies
-    for g in range(num(ortho.groups)):
-        oldgroup = ortho.groups[g]
-        newgroup = [None] * num(newspecies)
+    _ortho = OrthoFinderOrthogroups(samples=newsamples)
+    for oldgroup in ortho.groups:
+        newgroup = _ortho.new_group(append=False)
+        newgroup.id = oldgroup.id
         passes = False
-        for species in newspecies:
-            if oldgroup[oldindices[species]]:
-                newgroup[newindices[species]] = oldgroup[oldindices[species]]
+        for sample in newsamples:
+            if num(oldgroup[oldindices[sample]]) > 0:
+                newgroup[newindices[sample]] = oldgroup[oldindices[sample]]
                 passes = True
-            else:
-                newgroup[newindices[species]] = tuple()
         if passes:
             _ortho.groups.append(newgroup)
-            _ortho.ids.append(ortho.ids[g])
-
     ortho = _ortho
 
-    if prefix_species:
-        for g in range(num(ortho.groups)):
-            for s in range(num(ortho.species)):
-                if ortho.groups[g][s] is None:
+    if prefix_samples:
+        for group in ortho.groups:
+            for sample in ortho.samples:
+                if not group[sample.index]:
                     continue
                 members = list()
-                prefix = ortho.species[s] + prefix_delim
-                for member in ortho.groups[g][s]:
+                prefix = sample.id + prefix_delim
+                for member in group[sample.index]:
                     if not member.startswith(prefix):
                         member = prefix + member.replace(prefix_delim,replace_delim)
                     members.append(member)
-                ortho.groups[g][s] = tuple(members)
+                group[sample.index] = members
                 
-    if remove_species:
-        for g in range(num(ortho.groups)):
-            for s in range(num(ortho.species)):
-                if ortho.groups[g][s] is None:
+    if remove_samples:
+        for group in ortho.groups:
+            for sample in ortho.samples:
+                if not group[sample.index]:
                     continue
                 members = list()
-                prefix = ortho.species[s] + prefix_delim
-                for member in ortho.groups[g][s]:
+                prefix = sample.id + prefix_delim
+                for member in group[sample.index]:
                     if member.startswith(prefix):
                         member = member[len(prefix):]
                     members.append(member)
-                ortho.groups[g][s] = tuple(members)
+                group[sample.index] = members
             
     if output_type == 'V':
-        orthogroups = []
-        for g in range(num(ortho.groups)):
-            orthogroups.append((
-                -sum(map(bool, ortho.groups[g])),
-                ortho.ids[g],
-                ortho.groups[g]
-            ))
-        orthogroups.sort()
-
-        # output_file.write(_TAB.join(ortho.species) + _EOL)
-        for g in range(num(orthogroups)):
-            ortho.ids[g] = orthogroups[g][1]
-            ortho.groups[g] = orthogroups[g][2]
+        ortho.groups.sort(key=lambda g: -g.num_members)
+        for group in ortho.groups:
             sep = _EMPTY
-            if ogid_as_species:
-                output_file.write(ortho.ids[g])
+            if ogid_as_sample:
+                output_file.write(group.id)
                 sep = _TAB
-            for s in range(num(ortho.species)):
-                if len(ortho.groups[g][s]) > 0:
+            for sample in ortho.samples:
+                if group[sample.index]:
                     output_file.write(
-                        "%s%s" % (sep, _TAB.join(ortho.groups[g][s]))
+                        sep + _TAB.join(group[sample.index])
                     )
                     sep = _TAB
             output_file.write(_LF)
 
     elif output_type == 'A':
-        if ogid_as_species:
-            if num(ortho.species) != 1:
-                raise Exception(_TWO_SPECIES_REQUIRED)
-        elif num(ortho.species) != 2:
-            raise Exception(_TWO_SPECIES_REQUIRED)
+        if ogid_as_sample:
+            if num(ortho.samples) != 1:
+                raise Exception(_TWO_SAMPLES_REQUIRED)
+        elif num(ortho.samples) != 2:
+            raise Exception(_TWO_SAMPLES_REQUIRED)
 
-        for g in range(num(ortho.groups)):
-            if ogid_as_species:
-                species_i = (ortho.ids[g],)
-                species_j = ortho.groups[g][0]
+        for group in ortho.groups:
+            if ogid_as_sample:
+                sample_i = (group.id,)
+                sample_j = group[0]
             else:
-                species_i = ortho.groups[g][0]
-                species_j = ortho.groups[g][1]
+                sample_i = group[0]
+                sample_j = group[1]
 
-            for member_i in species_i:
-                for member_j in species_j:
+            for member_i in sample_i:
+                for member_j in sample_j:
                     output_file.write(
                         _TAB.join((member_i, member_j)) + _LF
                     )
     else:
-        ortho.to_table(output_file)
+        if sort_by:
+            if abs(sort_by) & _SORT_OGIDS:
+                key = lambda g: g.id
+            elif abs(sort_by) & _SORT_MEMBERS:
+                key = lambda g: g.num_members
+            elif abs(sort_by) & _SORT_SAMPLES:
+                key = lambda g: g.num_samples
+            else:
+                raise AssertionError('Invalid sort value: %s' % str(sort_by))
+            ortho.groups.sort(key=key, reverse=(sort_by < 0))
+                              
+        ortho.to_file(output_file)
 
     if is_stream(output_file):
         output_file.close()
