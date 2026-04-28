@@ -40,36 +40,38 @@ LICENSE    := LICENSE
 
 BIN_TARGETS = \
 	$(BIN_DIR)/add-singleton-orthogroups \
+	$(BIN_DIR)/assign-BLG \
+	$(BIN_DIR)/assign-CLG \
+	$(BIN_DIR)/assign-hog-orthogroups \
+	$(BIN_DIR)/assign-JVLG \
+	$(BIN_DIR)/assign-locus-labels \
 	$(BIN_DIR)/cluster-orthogroups \
 	$(BIN_DIR)/count-orthogroups \
 	$(BIN_DIR)/filter-orthogroups \
+	$(BIN_DIR)/freq-chr-pairs-ava \
+	$(BIN_DIR)/freq-chr-pairs-two \
 	$(BIN_DIR)/join-orthogroups \
 	$(BIN_DIR)/parse-orthogroups \
-	$(BIN_DIR)/score-orthogroups \
-	$(BIN_DIR)/select-orthogroups \
-	$(BIN_DIR)/update-training-orthogroups \
-	$(BIN_DIR)/upset-orthogroups \
 	$(BIN_DIR)/plot-color-legend \
 	$(BIN_DIR)/plot-freq-chr-pairs \
 	$(BIN_DIR)/plot-genomic-intervals \
 	$(BIN_DIR)/plot-label-density \
-	$(BIN_DIR)/freq-chr-pairs-ava \
-	$(BIN_DIR)/freq-chr-pairs-two \
-	$(BIN_DIR)/rename-assembly-report \
 	$(BIN_DIR)/propagate-LGs \
-	$(BIN_DIR)/assign-locus-labels \
-	$(BIN_DIR)/assign-CLG \
-	$(BIN_DIR)/assign-JVLG
+	$(BIN_DIR)/rename-assembly-report \
+	$(BIN_DIR)/score-orthogroups \
+	$(BIN_DIR)/select-orthogroups \
+	$(BIN_DIR)/update-training-orthogroups \
+	$(BIN_DIR)/upset-orthogroups
 
 LIB_TARGETS = \
 	$(LIB_DIR)/og/__init__.py \
 	$(LIB_DIR)/og/constants.py \
 	$(LIB_DIR)/og/core/members.py \
 	$(LIB_DIR)/og/core/parsers/assembly_report.py \
-	$(LIB_DIR)/og/core/parsers/newick.py \
-	$(LIB_DIR)/og/core/parsers/orthogroups.py \
 	$(LIB_DIR)/og/core/parsers/bed.py \
 	$(LIB_DIR)/og/core/parsers/config.py \
+	$(LIB_DIR)/og/core/parsers/newick.py \
+	$(LIB_DIR)/og/core/parsers/orthogroups.py \
 	$(LIB_DIR)/og/core/parsers/tsv.py \
 	$(LIB_DIR)/og/core/trees.py \
 	$(LIB_DIR)/og/core/utils.py
