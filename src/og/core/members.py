@@ -30,18 +30,33 @@ def map_locus_to_sequence(locus_name, namemap, is_placed=_placed):
     return sequence_name
 
 
-def _map_loci_to_sequences(locus_names, namemap, is_placed=_placed):
-    for locus_name in locus_names:
-        yield map_locus_to_sequence(
-            locus_name,
-            namemap,
-            is_placed,
-            ignore_unplaced=False
-        )
-        
 
 def map_loci_to_sequences(locus_names, namemap,
                           is_placed=_placed, ignore_unplaced=False):
+    sequences = dict()
+    if not locus_names:
+        return sequences
+
+    for locus_name in locus_names:
+        sequence_name = map_locus_to_sequence(locus_name, namemap, is_placed)
+        increment_unit = int_placed(
+            namemap.references[sequence_name],
+            is_placed,
+            ignore_unplaced
+        )
+        if increment_unit:
+            if increment_unit < 0:
+                sequence_name = namemap.unplaced_id
+        else:
+            sequence_name = None
+        sequences[locus_name] = sequence_name
+
+    return sequences
+        
+
+        
+def map_loci_to_sequence_counts(locus_names, namemap,
+                                is_placed=_placed, ignore_unplaced=False):
     count = dict()
     if not locus_names:
         return count

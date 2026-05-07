@@ -8,16 +8,16 @@ SUB_DIR    := submodules
 BIN_DIR    := $(BUILD_DIR)/bin
 LIB_DIR    := $(BUILD_DIR)/lib
 
-ECHO       := echo
-PYTHON     := $(filter /%,$(shell /bin/sh -c 'type python'))
-INSTALL    := $(filter /%,$(shell /bin/sh -c 'type install'))
-MKDIR      := $(filter /%,$(shell /bin/sh -c 'type mkdir'))
-AWK        := $(filter /%,$(shell /bin/sh -c 'type awk'))
-CAT        := $(filter /%,$(shell /bin/sh -c 'type cat'))
-SED        := $(filter /%,$(shell /bin/sh -c 'type sed'))
-CP         := $(filter /%,$(shell /bin/sh -c 'type cp'))
-RM         := $(filter /%,$(shell /bin/sh -c 'type rm'))
-GIT        := $(filter /%,$(shell /bin/sh -c 'type git'))
+ECHO       := $(shell which echo 2>/dev/null)
+PYTHON     := $(shell which python 2>/dev/null)
+INSTALL    := $(shell which install 2>/dev/null)
+MKDIR      := $(shell which mkdir 2>/dev/null)
+AWK        := $(shell which awk 2>/dev/null)
+CAT        := $(shell which cat 2>/dev/null)
+SED        := $(shell which sed 2>/dev/null)
+CP         := $(shell which cp 2>/dev/null)
+RM         := $(shell which rm 2>/dev/null)
+GIT        := $(shell which git 2>/dev/null)
 
 GIT_SUBUPDATE = $(GIT) submodule update --init --recursive
 GIT_CHECKOUT  = $(GIT) checkout
@@ -26,14 +26,15 @@ CP_R        = $(CP) -R
 RM_R        = $(RM) -r
 
 PYTHON_VER := $(shell $(PYTHON) --version 2>&1 | awk '{if (/Python/) {split($$2,v,".");print "python"v[1]"."v[2]}}')
-INSTALL_REG = $(INSTALL) -m 644 -p
 INSTALL_DIR = $(INSTALL) -m 755 -d
 INSTALL_EXE = $(INSTALL) -m 755 -p
 INSTALL_LIB = $(CP_R) -a
+INSTALL_REG = $(INSTALL) -m 644 -p
 MKDIR_P     = $(MKDIR) -p
 
 
-PACKAGE    := OGTK
+PROJECT    := OGTK
+LIBRARY    := og
 VERSION    := $(shell $(GIT) describe --long --tags --always)
 CONTACT    := https:\/\/github.com\/JGI-Bioinformatics\/ogtk
 LICENSE    := LICENSE
@@ -64,27 +65,33 @@ BIN_TARGETS = \
 	$(BIN_DIR)/upset-orthogroups
 
 LIB_TARGETS = \
-	$(LIB_DIR)/og/__init__.py \
-	$(LIB_DIR)/og/constants.py \
-	$(LIB_DIR)/og/core/members.py \
-	$(LIB_DIR)/og/core/parsers/assembly_report.py \
-	$(LIB_DIR)/og/core/parsers/bed.py \
-	$(LIB_DIR)/og/core/parsers/config.py \
-	$(LIB_DIR)/og/core/parsers/newick.py \
-	$(LIB_DIR)/og/core/parsers/orthogroups.py \
-	$(LIB_DIR)/og/core/parsers/tsv.py \
-	$(LIB_DIR)/og/core/trees.py \
-	$(LIB_DIR)/og/core/utils.py
+	$(LIB_DIR)/$(LIBRARY)/__init__.py \
+	$(LIB_DIR)/$(LIBRARY)/constants.py \
+	$(LIB_DIR)/$(LIBRARY)/core/members.py \
+	$(LIB_DIR)/$(LIBRARY)/core/parsers/assembly_report.py \
+	$(LIB_DIR)/$(LIBRARY)/core/parsers/bed.py \
+	$(LIB_DIR)/$(LIBRARY)/core/parsers/config.py \
+	$(LIB_DIR)/$(LIBRARY)/core/parsers/newick.py \
+	$(LIB_DIR)/$(LIBRARY)/core/parsers/orthogroups.py \
+	$(LIB_DIR)/$(LIBRARY)/core/parsers/tsv.py \
+	$(LIB_DIR)/$(LIBRARY)/core/trees.py \
+	$(LIB_DIR)/$(LIBRARY)/core/utils.py
 
 SUB_TARGETS = \
-	$(LIB_DIR)/og/core/compression
+	$(LIB_DIR)/$(LIBRARY)/core/compression \
+	$(LIB_DIR)/$(LIBRARY)/core/intervals \
+	$(LIB_DIR)/$(LIBRARY)/core/strand.py \
 
 
+.SUFFIXES:
 .SUFFIXES: .py .sh .R
 
-.PHONY: install activate clean
+.PHONY: all install activate clean
 
-all: build activate
+all: $(LIB_DIR) $(BIN_DIR) $(LIB_TARGETS) $(SUB_TARGETS) $(BIN_TARGETS) activate
+
+$(BUILD_DIR):
+	@$(MKDIR_P) $@
 
 $(BIN_DIR): 
 	@$(MKDIR_P) $@
@@ -109,13 +116,14 @@ $(LIB_DIR)/%: $(SRC_DIR)/%
 	@$(AWK) 'BEGIN{print "#!/usr/bin/env python3"} {print "#",$$0}' $(LICENSE) | $(CAT) - $< | \
 		$(SED) "s/__PACKAGE_NAME__/$(PACKAGE)/;s/__PACKAGE_VERSION__/$(VERSION)/;s/__PACKAGE_CONTACT__/$(CONTACT)/" >$@
 
-$(LIB_DIR)/og/core/%: $(SUB_DIR)/%/src/%
-	@$(CP_R) $(SUB_DIR)/$*/src/$* $(LIB_DIR)/og/core
+$(LIB_DIR)/$(LIBRARY)/core/%: $(LIB_DIR)/$(LIBRARY) $(SUB_DIR)/%/src/%
+	$(CP_R) $(SUB_DIR)/$*/src/$* $(LIB_DIR)/$(LIBRARY)/core
+
+$(LIB_DIR)/$(LIBRARY)/core/%.py: $(LIB_DIR)/$(LIBRARY) $(SUB_DIR)/%/src/%
+	$(CP) $(SUB_DIR)/$*/src/$*.py $(LIB_DIR)/$(LIBRARY)/core/
 
 $(SUB_DIR)/%/src/%:
 	$(GIT_SUBUPDATE) $<
-
-build: $(LIB_DIR) $(LIB_TARGETS) $(SUB_TARGETS) $(BIN_DIR) $(BIN_TARGETS)
 
 
 activate:

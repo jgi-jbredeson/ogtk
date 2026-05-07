@@ -5,7 +5,7 @@ import getopt
 
 from math import inf as _POS_INF
 from og.core.utils import index_list
-from og.core.members import map_loci_to_sequences
+from og.core.members import map_loci_to_sequence_counts
 from og.core.parsers.config import SampleConfigFile
 from og.core.parsers.orthogroups import OrthoFinderOrthogroups
 from og.core.parsers.assembly_report import is_chr as _localized
@@ -123,7 +123,7 @@ def main(argv):
         for group in ortho.groups:
             for sample in ortho.samples:
                 group[sample.index] = sorted(
-                    map_loci_to_sequences(
+                    map_loci_to_sequence_counts(
                         group[sample.index],
                         config.samples[sample.id],
                         is_placed,

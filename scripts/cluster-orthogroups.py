@@ -15,7 +15,7 @@ import getopt
 
 from math import inf as _POS_INF
 from og.core.members import _LENIENT, _STRICT
-from og.core.members import map_loci_to_sequences
+from og.core.members import map_loci_to_sequence_counts
 from og.core.members import filter_unplaced_sequences
 from og.core.compression import is_stream
 from og.core.parsers.config import SampleConfigFile
@@ -320,7 +320,7 @@ def main(argv):
             seq_group = seq_ortho.new_group(append=True)
             for sample in loc_ortho.samples:
                 seq_group[sample.index] = \
-                    list(map_loci_to_sequences(
+                    list(map_loci_to_sequence_counts(
                         loc_group[sample.index],
                         config.samples[sample.id],
                         is_placed,

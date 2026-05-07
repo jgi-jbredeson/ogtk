@@ -16,7 +16,7 @@ import getopt
 
 from math import inf as _POS_INF
 from og.core.members import _LENIENT, _STRICT
-from og.core.members import map_loci_to_sequences
+from og.core.members import map_loci_to_sequence_counts
 from og.core.members import filter_unplaced_sequences
 from og.core.compression import is_stream
 from og.core.parsers.config import SampleConfigFile
@@ -225,7 +225,7 @@ def main(argv):
         if map_seq_names:
             for sample in ortho.samples:
                 sequence_names[sample.index] = \
-                    map_loci_to_sequences(
+                    map_loci_to_sequence_counts(
                         group[sample.index],
                         config.samples[sample.id],
                         is_placed,

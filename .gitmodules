@@ -1,3 +1,9 @@
 [submodule "submodules/compression"]
 	path = submodules/compression
 	url = https://github.com/bredeson/compression.git
+[submodule "submodules/intervals"]
+	path = submodules/intervals
+	url = https://github.com/bredeson/intervals.git
+[submodule "submodules/strand"]
+	path = submodules/strand
+	url = https://github.com/bredeson/strand.git

@@ -9,14 +9,16 @@ from og.constants import (
     _TAB
 )
 from og.core.compression import open, is_stream
-
+from og.core.intervals import Interval, IntervalList
+from og.core.strand import Strand
 
 if _PYTHON_VERSION < (3,7):
     from collections import OrderedDict as dict
 
+
+
 num = len
-_STRAND_TO_INT = {'-': -1, '.': 0, '+': +1}
-_STRAND_TO_STR = ('.','+','-')    
+
 
 
 class BEDFormatError(Exception):
@@ -24,37 +26,58 @@ class BEDFormatError(Exception):
 
 
 
-class BEDRecord(object):
+class BEDRecord(Interval):
+    """Object representing a minimal BED record"""
     def __init__(self, chr, beg, end):
-        self.chr = chr
-        self.beg = beg
-        self.end = end
+        super().__init__(chr, beg, end)
 
     def __str__(self):
-        return _TAB.join(map(str, (
-            self.chr,
-            self.beg,
-            self.end
-        )))
+        return '%s\t%d\t%d' % (self.chr, self.beg, self.end)
+        
+    @property
+    def chr(self):
+        return self.namespace
 
+    @chr.setter
+    def chr(self, chr):
+        self.namespace = chr
+        
     
 
 class BED6Record(BEDRecord):
     def __init__(self, chr, beg, end, name=None, score=0, strand=0):
-        BEDRecord.__init__(self, chr, beg, end)
+        super().__init__(chr, beg, end)
         self.name = name
         self.score = score
         self.strand = strand
 
     def __str__(self):
         return _TAB.join(map(str, (
-            BEDRecord.__str__(self),
-            _DOT if self.name is None else self.name,
+            self.chr,
+            self.beg,
+            self.end,
+            _DOT if not self.name else self.name,
             self.score,
-            _STRAND_TO_STR[self.strand]
+            self.strand.str
         )))
 
+    @property
+    def name(self):
+        return self._name
 
+    @name.setter
+    def name(self, name):
+        self._name = name
+
+    @property
+    def strand(self):
+        return self._strand
+
+    @strand.setter
+    def strand(self, strand):
+        self._strand = Strand(strand)
+
+        
     
 class BEDFile(dict):
     def __init__(self, infile, recordclass=BED6Record, **kwargs):
@@ -102,12 +125,12 @@ class BEDFile(dict):
                 bed.name = fields[3].strip()
             if num(fields) > 5:
                 bed.score = float(fields[4])
-                bed.strand = _STRAND_TO_INT[fields[5].strip()]
+                bed.strand = fields[5].strip()
 
             if bed.chr not in self:
-                self[bed.chr] = list()
+                self[bed.chr] = IntervalList()
 
-            self[bed.chr].append(bed)
+            self[bed.chr].insort(bed)
 
 
     def from_file(self, infile, **kwargs):
@@ -194,7 +217,7 @@ class BEDNameMapFile(BEDFile):
             
             if num(fields) > 5:
                 bed.score = float(fields[4])
-                bed.strand = _STRAND_TO_INT[fields[5].strip()]
+                bed.strand = fields[5].strip()
 
             if bed.name in self:
                 raise KeyError("Duplicate locus name: %s" % bed.name)
