@@ -1,10 +1,13 @@
 
-PREFIX     := /usr/local
+PREFIX     ?= /usr/local
+INSTALL_PATH ?= $(PREFIX)/lib/$(PYTHON_VERSION)/site-packages
 
-SRC_DIR    := src
-BUILD_DIR  := build
-SCRIPT_DIR := scripts
-SUB_DIR    := submodules
+CURR_PATH   = $(shell pwd)
+
+SRC_DIR    := $(CURR_PATH)/src
+BUILD_DIR  := $(CURR_PATH)/build
+SCRIPT_DIR := $(CURR_PATH)/scripts
+SUB_DIR    := $(CURR_PATH)/submodules
 BIN_DIR    := $(BUILD_DIR)/bin
 LIB_DIR    := $(BUILD_DIR)/lib
 
@@ -16,28 +19,38 @@ AWK        := $(shell which awk 2>/dev/null)
 CAT        := $(shell which cat 2>/dev/null)
 SED        := $(shell which sed 2>/dev/null)
 CP         := $(shell which cp 2>/dev/null)
+CP_R        = $(CP) -R
 RM         := $(shell which rm 2>/dev/null)
+RM_R        = $(RM) -r
 GIT        := $(shell which git 2>/dev/null)
 
-GIT_SUBUPDATE = $(GIT) submodule update --init --recursive
-GIT_CHECKOUT  = $(GIT) checkout
-
-CP_R        = $(CP) -R
-RM_R        = $(RM) -r
-
-PYTHON_VER := $(shell $(PYTHON) --version 2>&1 | awk '{if (/Python/) {split($$2,v,".");print "python"v[1]"."v[2]}}')
 INSTALL_DIR = $(INSTALL) -m 755 -d
 INSTALL_EXE = $(INSTALL) -m 755 -p
 INSTALL_LIB = $(CP_R) -a
 INSTALL_REG = $(INSTALL) -m 644 -p
 MKDIR_P     = $(MKDIR) -p
 
+GIT_SUBUPDATE = $(GIT) submodule update --init --recursive
+GIT_CHECKOUT  = $(GIT) checkout
 
 PROJECT    := OGTK
 LIBRARY    := og
 VERSION    := $(shell $(GIT) describe --long --tags --always)
 CONTACT    := https:\/\/github.com\/JGI-Bioinformatics\/ogtk
 LICENSE    := LICENSE
+
+
+ifneq ($(shell which python3),)
+PYTHON     := $(shell which python3)
+else ifneq ($(shell which python),)
+PYTHON     := $(shell which python)
+else
+$(error "Python interpreter not found. Please install Python and ensure it is accessible via PATH.")
+endif
+
+PYTHON_VERSION := $(shell $(PYTHON) --version 2>&1 | awk '{if (/Python/) {split($$2,v,".");print "python"v[1]"."v[2]}}')
+
+
 
 BIN_TARGETS = \
 	$(BIN_DIR)/add-singleton-orthogroups \
@@ -78,9 +91,10 @@ LIB_TARGETS = \
 	$(LIB_DIR)/$(LIBRARY)/core/utils.py
 
 SUB_TARGETS = \
+	$(LIB_DIR)/bgzip.py \
+	$(LIB_DIR)/$(LIBRARY)/core/strand.py \
 	$(LIB_DIR)/$(LIBRARY)/core/compression \
 	$(LIB_DIR)/$(LIBRARY)/core/intervals \
-	$(LIB_DIR)/$(LIBRARY)/core/strand.py \
 
 
 .SUFFIXES:
@@ -116,28 +130,29 @@ $(LIB_DIR)/%: $(SRC_DIR)/%
 	@$(AWK) 'BEGIN{print "#!/usr/bin/env python3"} {print "#",$$0}' $(LICENSE) | $(CAT) - $< | \
 		$(SED) "s/__PACKAGE_NAME__/$(PACKAGE)/;s/__PACKAGE_VERSION__/$(VERSION)/;s/__PACKAGE_CONTACT__/$(CONTACT)/" >$@
 
-$(LIB_DIR)/$(LIBRARY)/core/%: $(LIB_DIR)/$(LIBRARY) $(SUB_DIR)/%/src/%
-	$(CP_R) $(SUB_DIR)/$*/src/$* $(LIB_DIR)/$(LIBRARY)/core
 
-$(LIB_DIR)/$(LIBRARY)/core/%.py: $(LIB_DIR)/$(LIBRARY) $(SUB_DIR)/%/src/%
-	$(CP) $(SUB_DIR)/$*/src/$*.py $(LIB_DIR)/$(LIBRARY)/core/
+$(LIB_DIR)/$(LIBRARY)/core/%: $(LIB_DIR)/$(LIBRARY) $(SUB_DIR)/%/src/%
+	make -C $(SUB_DIR)/$(subst .py,,$*) install INSTALL_PATH=$(@D)
+
+$(LIB_DIR)/bgzip.py: $(SUB_DIR)/compression/src/bgzip.py
+	make -C $(SUB_DIR)/compression install-bgzip INSTALL_PATH=$(@D)
 
 $(SUB_DIR)/%/src/%:
 	$(GIT_SUBUPDATE) $<
 
 
 activate:
-	@$(ECHO) 'export PYTHONPATH="$(PREFIX)/lib/$(PYTHON_VER)/site-packages:$$PYTHONPATH";' >activate
+	@$(ECHO) 'export PYTHONPATH="$(INSTALL_PATH):$$PYTHONPATH";' >activate
 	@$(ECHO) 'export PATH="$(PREFIX)/bin:$$PATH";' >>activate
-	@$(ECHO) '#setenv PYTHONPATH "$(PREFIX)/lib/$(PYTHON_VER)/site-packages:$$PYTHONPATH";' >>activate
+	@$(ECHO) '#setenv PYTHONPATH "$(INSTALL_PATH):$$PYTHONPATH";' >>activate
 	@$(ECHO) '#setenv PATH "$(PREFIX)/bin:$$PATH";' >>activate
 
 
 install: all
 	$(INSTALL_DIR) $(PREFIX)/bin
-	$(INSTALL_DIR) $(PREFIX)/lib/$(PYTHON_VER)/site-packages
+	$(INSTALL_DIR) $(INSTALL_PATH)
 	$(INSTALL_EXE) $(BIN_DIR)/* $(PREFIX)/bin
-	$(INSTALL_LIB) $(LIB_DIR)/* $(PREFIX)/lib/$(PYTHON_VER)/site-packages
+	$(INSTALL_LIB) $(LIB_DIR)/* $(INSTALL_PATH)
 	$(INSTALL_REG) activate $(PREFIX)/
 
 
