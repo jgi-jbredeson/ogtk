@@ -57,6 +57,15 @@ _PIPE = '|'
 _SPACE = ' '
 _TAB = '\t'
 
+_COMPRESSION_FLAGS = (
+    'mode',
+    'compresslevel',
+    'encoding',
+    'errors',
+    'newline',
+    'compression'
+)
+
 _dummy = range
 if _PYTHON_VERSION < (3,):
     range = xrange

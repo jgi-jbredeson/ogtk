@@ -101,18 +101,18 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Version: %s %s\n" % (__pkgname__, __version__))
     stream.write("Contact: %s\n" % __contact__)
     stream.write("\n")
-    stream.write("Usage:   %s [options] <in.tsv> <in.conf>\n" % __program__)
+    stream.write("Usage: %s [options] <in.tsv>\n" % __program__)
     stream.write("\n")
     stream.write("Options:\n")
     # stream.write("  -b,--locus-bed-table <file>\n")
     # stream.write("     Table of sample ID and BED path\n")
-    stream.write("\n")
-    stream.write("  -c,--output-cluster-counts-file <file>\n")
-    stream.write("     Write distinct cluster patterns with counts to file.\n")
-    stream.write("\n")
-    stream.write("  -C,--output-cluster-counts-file-all <file>\n")
-    stream.write("     Write all distinct cluster patterns with counts to file.\n")
-    stream.write("\n")
+    # stream.write("\n")
+    # stream.write("  -c,--output-cluster-counts-file <file>\n")
+    # stream.write("     Write distinct cluster patterns with counts to file.\n")
+    # stream.write("\n")
+    # stream.write("  -C,--output-cluster-counts-file-all <file>\n")
+    # stream.write("     Write all distinct cluster patterns with counts to file.\n")
+    # stream.write("\n")
     # stream.write("  -d,--min-distance <ufloat>\n")
     # stream.write("     Minimum distance between orthogroups to cluster [0.0]\n")
     # stream.write("\n")
@@ -123,8 +123,8 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     # stream.write("     Identify unplaced sequence using the specified regex. Takes effect\n")
     # stream.write("     only when the `-b` option is also enabled [none]\n")
     # stream.write("\n")
-    stream.write("  -F,--output-cluster-map-file <file>\n")
-    stream.write("     Write each cluster ID and member orthogroup ID to file.\n")
+    # stream.write("  -F,--output-cluster-map-file <file>\n")
+    # stream.write("     Write each cluster ID and member orthogroup ID to file.\n")
     stream.write("\n")    
     stream.write("  -g,--min-orthogroups <uint>\n")
     stream.write("     Minimum number of orthogroups per cluster to output [1]\n")
@@ -152,12 +152,19 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     stream.write("  -N,--output-sequence-names\n")
     stream.write("     Map locus names to sequence names internally, then perform clustering.\n")
-    stream.write("     Write sequence names to output (use `-n` for locus names).\n")
+    stream.write("     Write sequence names to output (use `-n` for locus names). Requires\n")
+    stream.write("     `--yaml` be defined.\n")
     stream.write("\n")
     stream.write("  -n,--map-to-sequence-names\n")
     stream.write("     Map locus names to sequence names internally, then perform clustering.\n")
-    stream.write("     Write locus names to output (use `-N` for sequence names).\n")
-    stream.write("\n")    
+    stream.write("     Write locus names to output (use `-N` for sequence names). Requires\n")
+    stream.write("     `--yaml` be defined.\n")
+    stream.write("\n")
+    stream.write("  -p,--input-sequence-names\n")
+    stream.write("     Locus names have already been mapped to their corresponding sequence\n")
+    stream.write("     names in the input orthogroups file. Perform filtering accordingly.\n")
+    stream.write("     Requires `--yaml` be defined.\n")
+    stream.write("\n")
     stream.write("  -s,--min-samples <uint>\n")
     stream.write("     Minimum number of samples permitted per orthogroup [2]\n")
     stream.write("\n")
@@ -167,7 +174,13 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("  -u,--ignore-unlocalized\n")
     stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
     stream.write("     designated sequence names, not to their placed chromosome names.\n")
-    stream.write("\n")    
+    stream.write("\n")
+    stream.write("  -y,--yaml <in.yaml>\n")
+    stream.write("     Input YAML config file, with `tree` mapping key with nested submapping\n")
+    stream.write("     `ploidy` key to a Newick tree string value. For each species, a mapping\n")
+    stream.write("     with required submappings: `loci` and `references` keys with file path\n")
+    stream.write("     values, and `unplaced_id` key with string value.\n")
+    stream.write("\n")
     stream.write("  -h,--help\n")
     stream.write("     Print this help message and exit.\n")
     #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
@@ -212,7 +225,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 
     
 def main(argv):
-    short_flags = 'hc:C:d:D:F:g:G:iIm:M:nNs:S:u'
+    short_flags = 'hc:C:d:D:F:g:G:iIm:M:nNs:S:uy:'
     long_flags = (
         'help',
         'ignore-unplaced-leniently',
@@ -226,11 +239,13 @@ def main(argv):
         'max-samples=','max-species=',
         'min-distance=',
         'max-distance=',
-        'output-cluster-counts-file-all=',
-        'output-cluster-counts-file=',
-        'output-cluster-map-file=',
+        # 'output-cluster-counts-file-all=',
+        # 'output-cluster-counts-file=',
+        # 'output-cluster-map-file=',
         'output-sequence-names',
-        'map-to-sequence-names'
+        'map-to-sequence-names',
+        'input-sequence-names',
+        'yaml='
     )
     try:
         options, arguments = getopt.getopt(argv, short_flags, long_flags)
@@ -251,84 +266,123 @@ def main(argv):
     is_placed = _placed
     ignore_unplaced = False
     map_seq_names = False
+    input_seq_names = False
     output_seq_names = False
+    config_filename = None
     for flag, value in options:
         if   flag in ('-h','--help'):
             usage(exitcode=0)
-        elif flag in ('-i','--ignore-unplaced-leniently'):
-            ignore_unplaced = _LENIENT
-        elif flag in ('-I','--ignore-unplaced-strictly'):
-            ignore_unplaced = _STRICT
-        elif flag in ('-u','--ignore-unlocalized'):
-            is_placed = _localized
-        elif flag in ('-m','--min-members'):
-            min_members = int(float(value))
-        elif flag in ('-M','--max-members'):
-            max_members = int(float(value))
-        elif flag in ('-g','--min-orthogroups'):
-            min_orthogroups = int(float(value))
-        elif flag in ('-G','--max-orthogroups'):
-            max_orthogroups = int(float(value))
-        elif flag in ('-s','--min-samples','--min-species'):
-            min_samples = int(float(value))
-        elif flag in ('-S','--max-samples','--max-species'):
-            max_samples = int(float(value))
         elif flag in ('-d','--min-distance'):
             min_dist = float(value)
         elif flag in ('-D','--max-distance'):
             max_dist = float(value)
+        elif flag in ('-g','--min-orthogroups'):
+            min_orthogroups = int(float(value))
+        elif flag in ('-G','--max-orthogroups'):
+            max_orthogroups = int(float(value))
+        elif flag in ('-i','--ignore-unplaced-leniently'):
+            ignore_unplaced = _LENIENT
+        elif flag in ('-I','--ignore-unplaced-strictly'):
+            ignore_unplaced = _STRICT            
+        elif flag in ('-m','--min-members'):
+            min_members = int(float(value))
+        elif flag in ('-M','--max-members'):
+            max_members = int(float(value))
         elif flag in ('-n','--map-to-sequence-names'):
             map_seq_names = True
         elif flag in ('-N','--output-sequence-names'):
-            output_seq_names = map_seq_names = True
-        elif flag in ('-C','--output-cluster-counts-file-all'):
-            cluster_counts_all_file = open(value, 'wt')
-        elif flag in ('-c','--output-cluster-counts-file'):
-            cluster_counts_mrg_file = open(value, 'wt');
-        elif flag in ('-F','--output-cluster-map-file'):
-            cluster_map_file = open(value, 'wt')
+            output_seq_names = True
+            map_seq_names = True
+        elif flag in ('-p','--input-sequences-names'):
+            input_seq_names = True
+        elif flag in ('-s','--min-samples','--min-species'):
+            min_samples = int(float(value))
+        elif flag in ('-S','--max-samples','--max-species'):
+            max_samples = int(float(value))
+        elif flag in ('-u','--ignore-unlocalized'):
+            is_placed = _localized            
+        elif flag in ('-y','--yaml'):
+            config_filename = value
 
+    config = None
+    if input_seq_names or map_seq_names:
+        if config_filename is None:
+            usage('`--yaml` config file required')
+    else:
+        output_seq_names = False
+        ignore_unplaced = False
+        
     if num(arguments) != 2:
         usage('Unexpected number of arguments')
 
-    loc_ortho  = OrthoFinderOrthogroups(arguments[0])
-    config = SampleConfigFile(arguments[1], load_files=True, map_assigned_molecule=True)
-    clust  = config.tree['ploidy']
-    ofile  = sys.stdout
-
-    num_samples = num(loc_ortho.samples)
-    samples_index = {s.id:s.index for s in loc_ortho.samples}
+    input_ortho = OrthoFinderOrthogroups(arguments[0])
+    cluster_counts_all_file = open(arguments[1] + '.all.tsv', 'wt')
+    cluster_counts_mrg_file = open(arguments[1] + '.mrg.tsv', 'wt')
+    cluster_map_file = open(arguments[1] + '.map.tsv', 'wt')
+    
+    
+    num_samples = num(input_ortho.samples)
+    samples_index = {s.id:s.index for s in input_ortho.samples}
 
     if min_dist >= 1.0:
         min_dist = min_dist / num_samples - _EPSILON
     if max_dist >= 1.0:
         max_dist = max_dist / num_samples + _EPSILON
 
-    if map_seq_names:
-        for sample in loc_ortho.samples:
+    if input_seq_names or map_seq_names:
+        config = SampleConfigFile(
+            config_filename,
+            load_files=True,
+            map_assigned_molecule=True
+        )            
+        for sample in input_ortho.samples:
             if sample.id not in config.samples:
                 raise KeyError(
-                    "Sample not found in conf file: '%s'" % str(sample.id)
+                    "Sample not found in YAML file: '%s'" % str(sample.id)
                 )
 
-        seq_ortho = OrthoFinderOrthogroups(samples=loc_ortho.samples)
-        # ortho.samples = loc_ortho.samples
-        # ortho.ids = loc_ortho.ids
-        # ortho.groups = [None] * num(loc_ortho.groups)
-        for loc_group in loc_ortho.groups:
-            # ortho.groups[group] = [None] * num_samples
-            seq_group = seq_ortho.new_group(append=True)
-            for sample in loc_ortho.samples:
-                seq_group[sample.index] = \
-                    list(map_loci_to_sequence_counts(
-                        loc_group[sample.index],
+        if input_seq_names:
+            chrom_ortho = input_ortho
+        else:
+            chrom_ortho = OrthoFinderOrthogroups(samples=input_ortho.samples)
+            for locus_group in input_ortho.groups:
+                chrom_group = chrom_ortho.new_group(append=True)
+                chrom_group.id = locus_group.id
+                for sample in input_ortho.samples:
+                    chrom_group[sample.index] = \
+                        map_loci_to_sequence_counts(
+                            locus_group[sample.index],
+                            config.samples[sample.id],
+                            is_placed,
+                            ignore_unplaced
+                        )
+            if output_seq_names:                    
+                input_ortho = chrom_ortho
+
+        clust_ortho = OrthoFinderOrthogroups(samples=chrom_ortho.samples)
+        for chrom_group in chrom_ortho.groups:
+            clust_group = clust_ortho.new_group(append=True)
+            clust_group.id = chrom_group.id
+            for sample in chrom_ortho.samples:
+                clust_group[sample.index] = \
+                    filter_unplaced_sequences(
+                        chrom_group[sample.index],
+                        config.samples[sample.id],
+                        is_placed,
+                        ignore_unplaced,
+                        aggregate_unplaced=True
+                    )
+                chrom_group[sample.index] = \
+                    filter_unplaced_sequences(
+                        chrom_group[sample.index],
                         config.samples[sample.id],
                         is_placed,
                         ignore_unplaced
-                    ))
-        ortho = seq_ortho
+                    )
     else:
-        ortho = loc_ortho
+        chrom_ortho = input_ortho
+        clust_ortho = input_ortho
+
     # TODO:
     #  Instead of using strings in sets, index gene-containing sequences
     #  into bit arrays and use std set operations. Must use numpy.array,
@@ -354,9 +408,9 @@ def main(argv):
     # mask64 = ctypes.c_uint64(~0).value
     # 
 
-    ############################################################################
+    ###########################################################################
     ## CLUSTERING PASS 1: EXACT-MATCH PATTERNS
-    ############################################################################
+    ###########################################################################
     
     # distinct_pattern_index_map maps patterns to distinct_pattern_groups,
     # each containing indices in the ortho.groups table with that pattern
@@ -365,29 +419,25 @@ def main(argv):
     distinct_pattern_groups = list()
 
     num_distinct_patterns = 0
-    for i in range(num(ortho.groups)):
-        pattern_incl_unanchored = tuple(map(tuple, ortho.groups[i]))
-        pattern_excl_unanchored = [tuple()] * num_samples
-        for sample in ortho.samples:
-            pattern_excl_unanchored[sample.index] = \
-                tuple(sorted(filter_unplaced_sequences(
-                    pattern_incl_unanchored[sample.index],
-                    config.samples[sample.id],
-                    is_placed,
-                    ignore_unplaced,
-                    aggregate_unplaced=True
-                )
-            ))
-        pattern = tuple(pattern_excl_unanchored)
+    for i in range(num(clust_ortho.groups)):
+        pattern_incl_unanchored = tuple(map(tuple, chrom_ortho.groups[i]))
+        pattern_excl_unanchored = tuple(map(tuple, clust_ortho.groups[i]))
 
-        if pattern not in distinct_pattern_index_map:
+        if pattern_excl_unanchored not in distinct_pattern_index_map:
             distinct_pattern_groups.append([])
             distinct_pattern_counts.append(0)
-            distinct_pattern_index_map[pattern] = num_distinct_patterns
+            distinct_pattern_index_map[
+                pattern_excl_unanchored
+            ] = num_distinct_patterns
             num_distinct_patterns += 1
 
-        distinct_pattern_groups[distinct_pattern_index_map[pattern]].append(i)
-        distinct_pattern_counts[distinct_pattern_index_map[pattern]] += 1
+        distinct_pattern_groups[
+            distinct_pattern_index_map[pattern_excl_unanchored]
+        ].append(i)
+        
+        distinct_pattern_counts[
+            distinct_pattern_index_map[pattern_excl_unanchored]
+        ] += 1
 
         
     distinct_patterns_ranked = sorted(
@@ -402,12 +452,12 @@ def main(argv):
     distinct_pattern_clustered = [0] * num_distinct_patterns
 
     
-    ############################################################################
+    ###########################################################################
     ## CLUSTERING PASS 2: MATCHING PATTERNS, ALLOWING MISSING DATA
-    ############################################################################
+    ###########################################################################
     
-    # clustered_pattern_index_map and partial_pattern_index_map map complete and
-    # partial patterns, respectively, to clustered_pattern_groups and
+    # clustered_pattern_index_map and partial_pattern_index_map map complete
+    # and partial patterns, respectively, to clustered_pattern_groups and
     # partial_pattern_groups, each group containing indices of patterns in
     # distinct_patterns_ranked
     clustered_pattern_index_map = dict()
@@ -438,7 +488,9 @@ def main(argv):
                 distinct_patterns_as_lists[i][j] = set()
                 distinct_patterns_excl_unanchored[i][j] = set()
                 
-            distinct_patterns_as_sets[i].update(distinct_patterns_as_lists[i][j])
+            distinct_patterns_as_sets[i].update(
+                distinct_patterns_as_lists[i][j]
+            )
 
         if n == num_samples:
             # patterns with complete chromosome membership are de facto their
@@ -446,12 +498,22 @@ def main(argv):
             pattern = _as_tuples(distinct_patterns_excl_unanchored[i])
             if pattern not in clustered_pattern_index_map:
                 clustered_pattern_index_map[pattern] = i  # sorted by rank
-                clustered_pattern_groups[clustered_pattern_index_map[pattern]] = []
-                clustered_pattern_counts[clustered_pattern_index_map[pattern]] = 0
+                clustered_pattern_groups[
+                    clustered_pattern_index_map[pattern]
+                ] = []
+                clustered_pattern_counts[
+                    clustered_pattern_index_map[pattern]
+                ] = 0
                 clustered_pattern_representatives.append(i)
-            clustered_pattern_groups[clustered_pattern_index_map[pattern]].append(i)
+
+            clustered_pattern_groups[
+                clustered_pattern_index_map[pattern]
+            ].append(i)
+            
             clustered_pattern_counts[clustered_pattern_index_map[pattern]] += \
-                distinct_pattern_counts[distinct_pattern_index_map[distinct_patterns_ranked[i]]]
+                distinct_pattern_counts[
+                    distinct_pattern_index_map[distinct_patterns_ranked[i]]
+                ]
             distinct_pattern_clustered[i] = 1
         else:
             partial_patterns.append(i)
@@ -461,10 +523,10 @@ def main(argv):
         reverse=True
     )
 
-    print('Num input orthogroups:', num(ortho.groups), file=_STDERR)
-    print('Num distinct patterns:', num_distinct_patterns, file=_STDERR)
-    print('Num placed (samples complete):', num(clustered_pattern_representatives), file=_STDERR)
-    print('Sum placed (samples complete):', sum(clustered_pattern_counts.values()), file=_STDERR)
+    # print('Num input orthogroups:', num(clust_ortho.groups), file=_STDERR)
+    # print('Num distinct patterns:', num_distinct_patterns, file=_STDERR)
+    # print('Num placed (samples complete):', num(clustered_pattern_representatives), file=_STDERR)
+    # print('Sum placed (samples complete):', sum(clustered_pattern_counts.values()), file=_STDERR)
 
 
     # Iterate through patterns at the bottom of the distinct_patterns_ranked
@@ -490,7 +552,9 @@ def main(argv):
                     best.append(i)
                     
         if num(best) == 1:
-            clustered_pattern_counts[best[0]] += distinct_pattern_counts[distinct_pattern_index_map[distinct_patterns_ranked[j]]]
+            clustered_pattern_counts[best[0]] += distinct_pattern_counts[
+                distinct_pattern_index_map[distinct_patterns_ranked[j]]
+            ]
             clustered_pattern_groups[best[0]].append(j)
             distinct_pattern_clustered[j] = 1
             distinct_pattern_rep[j] = best[0]
@@ -499,12 +563,16 @@ def main(argv):
         elif num(best) > 1:
             # [M]ultiple matches
             m += 1
-            M += distinct_pattern_counts[distinct_pattern_index_map[distinct_patterns_ranked[j]]]
+            M += distinct_pattern_counts[
+                distinct_pattern_index_map[distinct_patterns_ranked[j]]
+            ]
             distinct_pattern_clustered[j] = -1
         else:
             # [U]nplaced
             u += 1
-            U += distinct_pattern_counts[distinct_pattern_index_map[distinct_patterns_ranked[j]]]
+            U += distinct_pattern_counts[
+                distinct_pattern_index_map[distinct_patterns_ranked[j]]
+            ]
 
             
     for j in range(num_distinct_patterns - 1, -1, -1):
@@ -530,10 +598,14 @@ def main(argv):
             if best[0] not in clustered_pattern_groups:
                 clustered_pattern_representatives.append(best[0])
                 clustered_pattern_groups[best[0]] = [best[0]]
-                clustered_pattern_counts[best[0]] = distinct_pattern_counts[distinct_pattern_index_map[distinct_patterns_ranked[best[0]]]]
+                clustered_pattern_counts[best[0]] = distinct_pattern_counts[
+                    distinct_pattern_index_map[distinct_patterns_ranked[best[0]]]
+                ]
                 distinct_pattern_clustered[best[0]] = 1
-            clustered_pattern_counts[best[0]] += distinct_pattern_counts[distinct_pattern_index_map[distinct_patterns_ranked[j]]]
-            clustered_pattern_groups[best[0]].append(j)            
+            clustered_pattern_counts[best[0]] += distinct_pattern_counts[
+                    distinct_pattern_index_map[distinct_patterns_ranked[j]]
+                ]
+            clustered_pattern_groups[best[0]].append(j)
             distinct_pattern_clustered[j] = 1
             distinct_pattern_rep[j] = best[0]
             P += 1
@@ -541,59 +613,71 @@ def main(argv):
             distinct_pattern_clustered[j] = -1
             
 
-    ############################################################################
+    ###########################################################################
     ## CLUSTERING PASS 3: CHR-CHR ASSOCIATION CLUSTERING
-    ############################################################################
+    ###########################################################################
     
 
     
-    ############################################################################
+    ###########################################################################
     ## OUTPUT CLUSTERS
-    ############################################################################
+    ###########################################################################
     
-    print('Num placed (samples missing):', P, file=_STDERR)
-    print('Sum placed (samples missing):', sum(partial_pattern_counts.values()), file=_STDERR)
-    print('Num multiple best match:', m, file=_STDERR)
-    print('Sum multiple best match:', M, file=_STDERR)
-    print('Num unplaced (mismatches):', u, file=_STDERR)
-    print('Sum unplaced (mismatches):', U, file=_STDERR)
+    # print('Num placed (samples missing):', P, file=_STDERR)
+    # print('Sum placed (samples missing):', sum(partial_pattern_counts.values()), file=_STDERR)
+    # print('Num multiple best match:', m, file=_STDERR)
+    # print('Sum multiple best match:', M, file=_STDERR)
+    # print('Num unplaced (mismatches):', u, file=_STDERR)
+    # print('Sum unplaced (mismatches):', U, file=_STDERR)
 
     if cluster_counts_all_file or cluster_counts_mrg_file:
         if cluster_counts_mrg_file:
-            cluster_counts_mrg_file.write(
-                'Count\t%s\n' % OrthoFinderOrthogroups.format_orthogroups_header(ortho, id='Cluster')
-            )
+            cluster_counts_mrg_file.write('Count\t%s\n' % (
+                input_ortho.format_orthogroups_header(id='Cluster')
+            ))
         if cluster_counts_all_file:
-            cluster_counts_all_file.write(
-                'Count\t%s\n' % OrthoFinderOrthogroups.format_orthogroups_header(ortho, id='Cluster')
-            )
+            cluster_counts_all_file.write('Count\t%s\n' % (
+                input_ortho.format_orthogroups_header(id='Cluster')
+            ))
         cluster_count = 0
         for i in clustered_pattern_representatives:              # a distinct_patterns_ranked index
             for n, j in enumerate(clustered_pattern_groups[i]):  # a distinct_patterns_ranked index
                 cluster_id = _CLUSTER_ID(cluster_count + 1)
                 pattern_id = _PATTERN_ID(cluster_id, n + 1)
                 
-                num_patterns = num(distinct_pattern_groups[distinct_pattern_index_map[distinct_patterns_ranked[j]]])
+                num_patterns = num(distinct_pattern_groups[
+                    distinct_pattern_index_map[distinct_patterns_ranked[j]]
+                ])
                 if num_patterns == 1:
-                    pattern = ortho.groups[distinct_pattern_groups[distinct_pattern_index_map[distinct_patterns_ranked[j]]][0]]
+                    pattern = input_ortho.groups[distinct_pattern_groups[
+                        distinct_pattern_index_map[distinct_patterns_ranked[j]]
+                    ][0]]
                 else:
                     pattern = distinct_patterns_ranked[j]
                 
                 if n == 0 and \
                    cluster_counts_mrg_file:
-                    num_orthogroups = clustered_pattern_counts[i]                    
+                    num_orthogroups = clustered_pattern_counts[i]
                     if min_orthogroups <= num_orthogroups <= max_orthogroups:
                         cluster_counts_mrg_file.write('%d\t%s\n' % (
                             num_orthogroups,
-                            OrthoFinderOrthogroups.format_orthogroups_record(ortho, cluster_id, pattern)
+                            input_ortho.format_orthogroups_record(
+                                id=cluster_id,
+                                group=pattern
+                            )
                         ))
                         
                 if cluster_counts_all_file:
-                    num_orthogroups = distinct_pattern_counts[distinct_pattern_index_map[distinct_patterns_ranked[j]]]                
+                    num_orthogroups = distinct_pattern_counts[
+                        distinct_pattern_index_map[distinct_patterns_ranked[j]]
+                    ]
                     if min_orthogroups <= num_orthogroups <= max_orthogroups:
                         cluster_counts_all_file.write('%d\t%s\n' % (
                             num_orthogroups,
-                            OrthoFinderOrthogroups.format_orthogroups_record(ortho, pattern_id, pattern)
+                            input_ortho.format_orthogroups_record(
+                                id=pattern_id,
+                                group=pattern
+                            )
                         ))
             cluster_count += 1
             
@@ -605,24 +689,39 @@ def main(argv):
             cluster_id = _CLUSTER_ID(cluster_count + 1)
             pattern_id = _PATTERN_ID(cluster_id, n + 1)
             
-            num_orthogroups = distinct_pattern_counts[distinct_pattern_index_map[distinct_patterns_ranked[j]]]
-
-            num_patterns = num(distinct_pattern_groups[distinct_pattern_index_map[distinct_patterns_ranked[j]]])
+            num_orthogroups = distinct_pattern_counts[
+                distinct_pattern_index_map[distinct_patterns_ranked[j]]
+            ]
+            num_patterns = num(distinct_pattern_groups[
+                distinct_pattern_index_map[distinct_patterns_ranked[j]]
+            ])
             if num_patterns == 1:
-                pattern = ortho.groups[distinct_pattern_groups[distinct_pattern_index_map[distinct_patterns_ranked[j]]][0]]
+                pattern = input_ortho.groups[distinct_pattern_groups[
+                    distinct_pattern_index_map[distinct_patterns_ranked[j]]
+                ][0]]
             else:
                 pattern = distinct_patterns_ranked[j]
             
             if min_orthogroups <= num_orthogroups <= max_orthogroups:
                 if cluster_counts_mrg_file:
                     cluster_counts_mrg_file.write('%d\t%s\n' % (
-                        distinct_pattern_counts[distinct_pattern_index_map[distinct_patterns_ranked[j]]],
-                        OrthoFinderOrthogroups.format_orthogroups_record(ortho, cluster_id, pattern)
+                        distinct_pattern_counts[distinct_pattern_index_map[
+                            distinct_patterns_ranked[j]
+                        ]],
+                        input_ortho.format_orthogroups_record(
+                            id=cluster_id,
+                            group=pattern
+                        )
                     ))
                 if cluster_counts_all_file:
                     cluster_counts_all_file.write('%d\t%s\n' % (
-                        distinct_pattern_counts[distinct_pattern_index_map[distinct_patterns_ranked[j]]],
-                        OrthoFinderOrthogroups.format_orthogroups_record(ortho, pattern_id, pattern)
+                        distinct_pattern_counts[distinct_pattern_index_map[
+                            distinct_patterns_ranked[j]
+                        ]],
+                        input_ortho.format_orthogroups_record(
+                            id=pattern_id,
+                            group=pattern
+                        )
                     ))            
                     
             cluster_count += 1
@@ -634,20 +733,26 @@ def main(argv):
 
         
     if cluster_map_file:
-        cluster_map_file.write('Cluster\t%s\n' % OrthoFinderOrthogroups.format_orthogroups_header(ortho))
+        cluster_map_file.write('Cluster\t%s\n' % (
+            input_ortho.format_orthogroups_header()
+        ))
         cluster_count = 0
         for i in clustered_pattern_representatives:
             for n, j in enumerate(clustered_pattern_groups[i]):
                 cluster_id = _CLUSTER_ID(cluster_count + 1)
                 pattern_id = _PATTERN_ID(cluster_id, n + 1)
                 
-                num_orthogroups = distinct_pattern_counts[distinct_pattern_index_map[distinct_patterns_ranked[j]]]
+                num_orthogroups = distinct_pattern_counts[
+                    distinct_pattern_index_map[distinct_patterns_ranked[j]]
+                ]
                 
                 if min_orthogroups <= num_orthogroups <= max_orthogroups:
-                    for g in distinct_pattern_groups[distinct_pattern_index_map[distinct_patterns_ranked[j]]]:
+                    for g in distinct_pattern_groups[distinct_pattern_index_map[
+                            distinct_patterns_ranked[j]
+                    ]]:
                         cluster_map_file.write('%s\t%s\n' % (
                             pattern_id,
-                            OrthoFinderOrthogroups.format_orthogroups_record(ortho, index=g)
+                            input_ortho.format_orthogroups_record(index=g)
                         ))
             cluster_count += 1
 
@@ -659,13 +764,17 @@ def main(argv):
             cluster_id = _CLUSTER_ID(cluster_count + 1)
             pattern_id = _PATTERN_ID(cluster_id, n + 1)            
             
-            num_orthogroups = distinct_pattern_counts[distinct_pattern_index_map[distinct_patterns_ranked[j]]]
+            num_orthogroups = distinct_pattern_counts[
+                distinct_pattern_index_map[distinct_patterns_ranked[j]]
+            ]
             
             if min_orthogroups <= num_orthogroups <= max_orthogroups:
-                for g in distinct_pattern_groups[distinct_pattern_index_map[distinct_patterns_ranked[j]]]:
+                for g in distinct_pattern_groups[distinct_pattern_index_map[
+                        distinct_patterns_ranked[j]
+                ]]:
                     cluster_map_file.write('%s\t%s\n' % (
                         pattern_id,
-                        OrthoFinderOrthogroups.format_orthogroups_record(ortho, index=g)
+                        input_ortho.format_orthogroups_record(index=g)
                     ))
             cluster_count += 1
             

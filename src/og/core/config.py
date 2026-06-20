@@ -2,11 +2,13 @@
 import yaml  # requires PyYAML specifically: https://pypi.org/project/PyYAML
 
 from math import inf as _POS_INF
-from og.core.parsers.bed import BEDNameMapFile
-from og.core.parsers.newick import IntervalNewickTree
-from og.core.parsers.assembly_report import AssemblyReportFile
-from og.constants import _PYTHON_VERSION, dict
+from og.core.bed import BEDNameMapFile
+from og.core.newick import IntervalNewickTree
+from og.core.assembly_report import AssemblyReportFile
 from og.core.compression import open, is_stream
+from og.constants import _PYTHON_VERSION, dict
+
+
 
 _NEG_INF = -1.0 * _POS_INF
     
@@ -135,3 +137,24 @@ class SampleConfigFile(object):
     @species.setter
     def species(self, samples):
         self.samples = samples
+
+
+    def has_sample(self, sample_id):
+        return sample_id in self.samples
+
+
+    def has_samples(self, samples):
+        return all(map(self.has_sample, samples))
+            
+
+    def check_sample(self, sample):
+        if not self.has_sample(sample):
+            raise KeyError("Sample not found in config: %s" % str(sample))
+
+
+    def check_samples(self, samples):
+         for sample in samples:
+             self.check_sample(sample)
+
+
+             

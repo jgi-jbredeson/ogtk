@@ -1,26 +1,21 @@
 
-import sys
-
-
+from og.core.compression import open, is_stream
 from og.constants import (
-    _COMMA,
+    _COMPRESSION_FLAGS,
     _COMMENT,
+    _COMMA,
     _EMPTY,
-    _EOL,
     _SPACE,
     _TAB,
     range
 )
-from og.core.compression import open, is_stream
-
-_COMPRESSION_FLAGS = (
-    'mode',
-    'compresslevel',
-    'encoding',
-    'errors',
-    'newline',
-    'compression'
+from og.core.orthogroups import (
+    Orthogroups,
+    Orthogroup,
+    Samples,
+    Sample, 
 )
+
 
 _CS = _COMMA + _SPACE
 
@@ -30,8 +25,9 @@ def num(items):
     return 0 if None else len(items)
 
 
+
 def _join_on_comma(l):
-    return _EMPTY if l is None else _CS.join(l)
+    return _EMPTY if l is None else _CS.join(sorted(l))
 
 
 
@@ -39,207 +35,6 @@ class OrthogroupsFormatError(Exception):
     pass
 
 
-
-class Sample(object):
-    def __init__(self, id, name=None, index=-1):
-        self.id = id
-        self.name = name
-        self.index = index
-
-    def copy(self):
-        return self.__class__(self.id, name=self.name, index=self.index)
-
-
-    
-class Samples(list):
-    def __init__(self, samples=[]):
-        super().__init__()
-        self.extend(samples)
-
-        
-    def __setitem__(self, index, sample):
-        if isinstance(sample, Sample):
-            sample = sample.copy()
-        else:
-            sample = Sample(sample)
-        sample.index = index
-        super().__setitem__(index, sample)
-
-        
-    def append(self, sample):
-        if isinstance(sample, Sample):
-            sample = sample.copy()
-        else:
-            sample = Sample(sample)
-        sample.index = len(self)
-        super().append(sample)
-
-
-    def extend(self, samples):
-        for sample in samples:
-            self.append(sample)
-
-            
-    def insert(self, index, sample):
-        if isinstance(sample, Sample):
-            sample = sample.copy()
-        else:
-            sample = Sample(sample)
-        super().insert(index, sample)
-        for i, sample in range(index, len(self)):
-            self[i].index = i
-
-
-            
-class Members(set):
-    def __init__(self, members=(), group=None, sample=None, species=None):
-        super().__init__(members)
-        self.sample = sample or species
-        self.group = group
-    
-
-
-class Orthogroup(list):
-    def __init__(self, members=(), id=None, cluster=None, samples=None):
-        super().__init__()
-        self.cluster = cluster
-        self.samples = samples
-        self.id = id
-        if members:
-            self.extend(members)
-        elif samples:
-            self.extend([()] * len(samples))
-        
-        
-    def __setitem__(self, key, value):
-        sample = None
-        if self.samples:
-            if len(self.samples) <= key:
-                raise IndexError(
-                    "orthogroup sample count exceeds header sample count"
-                )
-            sample = self.samples[key] if self.samples else None
-        super().__setitem__(
-            key,
-            Members(value, group=self, sample=sample)
-        )
-
-    def __repr__(self):
-        return '%s(id=%s, %s)' % (
-            self.__class__.__name__,
-            self.id,
-            super().__repr__()
-        )
-
-    def append(self, value):
-        sample = None
-        if self.samples:
-            if len(self.samples) <= len(self):
-                raise IndexError(
-                    "orthogroup sample count exceeds header sample count"
-                )
-            sample = self.samples[len(self)]
-        super().append(Members(value, group=self, sample=sample))
-
-        
-    def extend(self, values):
-        for value in values:
-            self.append(value)
-
-
-    @property
-    def num_members(self):
-        return sum(map(num, self))
-
-    
-    @property
-    def num_samples(self):
-        return sum(map(bool, self))
-
-    
-        
-class Orthogroups(object):
-    def __init__(self, **kwargs):
-        self.clear()
-        self._prefix  = kwargs.get('prefix', _EMPTY)
-        self._factory = kwargs.get('factory', Orthogroup)
-        self.filename =	kwargs.get('filename', None)
-        self.samples  = kwargs.get('samples', [])
-        self.samples  = Samples(self.samples)
-
-        
-    def __iter__(self):
-        for i in range(num(self.groups)):
-            yield self.groups[i]
-
-            
-    def format_orthogroups_header(self, samples=None, id=None, species=None):
-        raise NotImplementedError('format_orthogroups_header()')
-
-    
-    def format_orthogroups_record(self, id=None, group=None, index=None):
-        raise NotImplementedError('format_orthogroups_record()')
-
-    
-    def to_file(self, file=sys.stdout, **kwargs):
-        if is_stream(file):
-            stream = file
-            close = False
-        else:
-            if 'r' in kwargs.get('mode', _EMPTY):
-                raise ValueError("%s.to_file() is write-only" % (
-                    self.__class__.__name__
-                ))
-            else:
-                kwargs['mode'] = 'w'
-
-            kwargs = {
-                k:v for k,v in kwargs.items() if k in _COMPRESSION_FLAGS
-            }
-            stream = open(file, **kwargs)
-            close = True
-
-        stream.write(self.format_orthogroups_header() + _EOL)
-        for i in range(num(self.groups)):
-            stream.write(self.format_orthogroups_record(index=i) + _EOL)
-
-        if close:
-            stream.close()
-
-
-    def from_file(self, file, **kwargs):
-        raise NotImplementedError('from_file()')
-
-
-    def from_string(self, instring):
-        raise NotImplementedError('from_string()')
-
-
-    def clear(self):
-        self.samples = []
-        self.groups = []
-        self.filename = None
-
-        
-    def new_group(self, append=False):
-        group = self._factory(samples=self.samples)
-        if append:
-            self.groups.append(group)
-        return group
-
-    
-    @property
-    def species(self):
-        return self.samples
-
-    
-    @species.setter
-    def species(self, species):
-        self.samples = samples
-        
-    to_table = to_file
-
-    
 
 class OrthoFinderOrthogroups(Orthogroups):
     def __init__(self, file=None, **kwargs):
@@ -294,7 +89,7 @@ class OrthoFinderOrthogroups(Orthogroups):
                     group.cluster = group.id
 
                 
-    def format_orthogroups_header(self, samples=None, id=None, species=None):
+    def format_header(self, samples=None, id=None, species=None):
         if id is None:
             id = self._prefix
         if samples or species:
@@ -309,8 +104,10 @@ class OrthoFinderOrthogroups(Orthogroups):
         return _TAB.join(header)
 
 
-    def format_orthogroups_record(self, id=None, group=None, index=None):
-        if index is not None:
+    def format_record(self, id=None, group=None, index=None):
+        if index is None and group is None:
+            raise ValueError("group or index keyword argument required")
+        elif group is None:
             group = self.groups[index]
             id = group.id
         return '%s\t%s' % (str(id), _TAB.join(map(_join_on_comma, group)))
@@ -349,8 +146,7 @@ class OrthoFinderOrthogroups(Orthogroups):
     def clear(self):
         super().clear()
         self.filename = None
-        
-        
+
 
 class ClusteredOrthogroups(OrthoFinderOrthogroups):
     def __init__(self, file=None, **kwargs):
@@ -398,12 +194,14 @@ class ClusteredOrthogroups(OrthoFinderOrthogroups):
                 group.cluster = fields[0].strip()
 
     
-    def format_orthogroups_record(
+    def format_record(
             self,
             id=None, cluster=None, prob=None,
             group=None, count=0, index=None
     ):
-        if index is not None:
+        if index is None and group is None:
+            raise ValueError("group or index keyword argument required")
+        elif group is None:
             group = self.groups[index]
             cluster = group.cluster
             id = group.id
@@ -424,13 +222,25 @@ class CountedClusteredOrthogroup(Orthogroup):
         super().__init__(members, id, cluster, samples)
         self.count = count
         self.probability = probability
+        
+
+    def copy(self):
+        return self.__class__(
+            id=self.id,
+            members=self,
+            cluster=self.cluster,
+            samples=self.samples,
+            count=self.count,
+            probability=self.probability
+        )
 
 
         
+        
 class CountedClusteredOrthogroups(OrthoFinderOrthogroups):
     def __init__(self, file=None, **kwargs):
+        kwargs['recordclass'] = kwargs.get('recordclass', CountedClusteredOrthogroup)
         kwargs['prefix'] = kwargs.get('prefix', 'Count\tCluster')
-        kwargs['factory'] = kwargs.get('factory', CountedClusteredOrthogroup)
         super().__init__(**kwargs)
         self.grouptag = kwargs.get('grouptag', '##group=')
         if file is not None:
@@ -480,7 +290,7 @@ class CountedClusteredOrthogroups(OrthoFinderOrthogroups):
                 group.id = fields[1].strip()
 
                 
-    def format_orthogroups_header(self, samples=None, id=None, species=None):
+    def format_header(self, samples=None, id=None, species=None):
         if id is None:
             id = self._prefix
         if samples or species:
@@ -496,14 +306,16 @@ class CountedClusteredOrthogroups(OrthoFinderOrthogroups):
         return _TAB.join(header)
 
     
-    def format_orthogroups_record(self, id=None, cluster=None, prob=None, group=None, count=0, index=None):
-        if index is not None:
+    def format_record(self, id=None, cluster=None, prob=None, group=None, count=0, index=None):
+        if index is None and group is None:
+            raise ValueError("group or index keyword argument required")
+        elif group is None:
             group = self.groups[index]
-            count = group.count
             cluster = group.cluster
+            count = group.count
             prob = group.probability
             id = group.id
-            
+        
         return _TAB.join((
             str(count),
             str(id),
@@ -573,7 +385,7 @@ class ClusterErrorOrthogroups(CountedClusteredOrthogroups):
                 group.probability = (old_prob, new_prob)
 
         
-    def format_orthogroups_header(self, samples=None, id=None, species=None):
+    def format_header(self, samples=None, id=None, species=None):
         if id is None:
             id = self._prefix
         if samples or species:
@@ -589,8 +401,10 @@ class ClusterErrorOrthogroups(CountedClusteredOrthogroups):
         return _TAB.join(header)
 
     
-    def format_orthogroups_record(self, id=None, cluster=None, prob=None, group=None, count=0, index=None):
-        if index is not None:
+    def format_record(self, id=None, cluster=None, prob=None, group=None, count=0, index=None):
+        if index is None and group is None:
+            raise ValueError("group or index keyword argument required")
+        elif group is None:
             group = self.groups[index]
             cluster = group.cluster
             count = group.count
@@ -604,3 +418,34 @@ class ClusterErrorOrthogroups(CountedClusteredOrthogroups):
             str(cluster[0]), '%g' % prob[0],
             str(cluster[1]), '%g' % prob[1],
         ))
+
+
+
+def OrthogroupsFile(filename):
+    filehandle = open(filename, 'rt')
+
+    firstline = next(filehandle)
+    if firstline.startswith('HOG') or \
+       firstline.startswith('Orthogroup'):
+        constructor = OrthoFinderOrthogroups
+        
+    elif firstline.startswith(ClusteredOrthogroups()._prefix):
+        constructor = ClusteredOrthogroups
+
+    elif firstline.startswith(CountedClusteredOrthogroups()._prefix):
+        if firstline.rstrip().endswith("ManualID\tManualProb\tPostID\tPostProb"):
+            constructor = ClusterErrorOrthogroups
+        else:
+            constructor = CountedClusteredOrthogroups
+    else:
+        raise OrthogroupsFormatError(
+            "Could not determine file format. Header possibly missing"
+        )
+    
+    if filehandle.seekable():
+        filehandle.seek(0)
+        return constructor(filehandle)
+    else:
+        ortho = constructor()
+        ortho.from_string(firstline + ''.join(filehandle))
+        return ortho

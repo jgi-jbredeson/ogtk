@@ -33,7 +33,7 @@ MKDIR_P     = $(MKDIR) -p
 GIT_SUBUPDATE = $(GIT) submodule update --init --recursive
 GIT_CHECKOUT  = $(GIT) checkout
 
-PROJECT    := OGTK
+PACKAGE    := OGTK
 LIBRARY    := og
 VERSION    := $(shell $(GIT) describe --long --tags --always)
 CONTACT    := https:\/\/github.com\/JGI-Bioinformatics\/ogtk
@@ -79,15 +79,38 @@ BIN_TARGETS = \
 
 LIB_TARGETS = \
 	$(LIB_DIR)/$(LIBRARY)/__init__.py \
+	$(LIB_DIR)/$(LIBRARY)/api/add_singletons.py \
+	$(LIB_DIR)/$(LIBRARY)/api/count.py \
+	$(LIB_DIR)/$(LIBRARY)/api/filter.py \
+	$(LIB_DIR)/$(LIBRARY)/api/join.py \
+	$(LIB_DIR)/$(LIBRARY)/api/score.py \
+	$(LIB_DIR)/$(LIBRARY)/api/subset.py \
+	$(LIB_DIR)/$(LIBRARY)/api/update.py \
+	$(LIB_DIR)/$(LIBRARY)/api/upset.py \
+	$(LIB_DIR)/$(LIBRARY)/api/view.py \
+	$(LIB_DIR)/$(LIBRARY)/cli/add_singletons.py \
+	$(LIB_DIR)/$(LIBRARY)/cli/count.py \
+	$(LIB_DIR)/$(LIBRARY)/cli/filter.py \
+	$(LIB_DIR)/$(LIBRARY)/cli/join.py \
+	$(LIB_DIR)/$(LIBRARY)/cli/score.py \
+	$(LIB_DIR)/$(LIBRARY)/cli/subset.py \
+	$(LIB_DIR)/$(LIBRARY)/cli/update.py \
+	$(LIB_DIR)/$(LIBRARY)/cli/upset.py \
+	$(LIB_DIR)/$(LIBRARY)/cli/utils.py \
+	$(LIB_DIR)/$(LIBRARY)/cli/view.py \
 	$(LIB_DIR)/$(LIBRARY)/constants.py \
+	$(LIB_DIR)/$(LIBRARY)/core/assembly_report.py \
+	$(LIB_DIR)/$(LIBRARY)/core/bed.py \
+	$(LIB_DIR)/$(LIBRARY)/core/config.py \
+	$(LIB_DIR)/$(LIBRARY)/core/counters.py \
+	$(LIB_DIR)/$(LIBRARY)/core/generic.py \
 	$(LIB_DIR)/$(LIBRARY)/core/members.py \
-	$(LIB_DIR)/$(LIBRARY)/core/parsers/assembly_report.py \
-	$(LIB_DIR)/$(LIBRARY)/core/parsers/bed.py \
-	$(LIB_DIR)/$(LIBRARY)/core/parsers/config.py \
-	$(LIB_DIR)/$(LIBRARY)/core/parsers/newick.py \
-	$(LIB_DIR)/$(LIBRARY)/core/parsers/orthogroups.py \
-	$(LIB_DIR)/$(LIBRARY)/core/parsers/tsv.py \
+	$(LIB_DIR)/$(LIBRARY)/core/newick.py \
+	$(LIB_DIR)/$(LIBRARY)/core/orthogroups/__init__.py \
+	$(LIB_DIR)/$(LIBRARY)/core/orthogroups/formatters.py \
+	$(LIB_DIR)/$(LIBRARY)/core/orthogroups/parsers.py \
 	$(LIB_DIR)/$(LIBRARY)/core/trees.py \
+	$(LIB_DIR)/$(LIBRARY)/core/tsv.py \
 	$(LIB_DIR)/$(LIBRARY)/core/utils.py
 
 SUB_TARGETS = \
@@ -131,7 +154,7 @@ $(LIB_DIR)/%: $(SRC_DIR)/%
 		$(SED) "s/__PACKAGE_NAME__/$(PACKAGE)/;s/__PACKAGE_VERSION__/$(VERSION)/;s/__PACKAGE_CONTACT__/$(CONTACT)/" >$@
 
 
-$(LIB_DIR)/$(LIBRARY)/core/%: $(LIB_DIR)/$(LIBRARY) $(SUB_DIR)/%/src/%
+$(LIB_DIR)/$(LIBRARY)/core/%: $(SUB_DIR)/%/src/% $(LIB_DIR)/$(LIBRARY) 
 	make -C $(SUB_DIR)/$(subst .py,,$*) install INSTALL_PATH=$(@D)
 
 $(LIB_DIR)/bgzip.py: $(SUB_DIR)/compression/src/bgzip.py
@@ -139,6 +162,7 @@ $(LIB_DIR)/bgzip.py: $(SUB_DIR)/compression/src/bgzip.py
 
 $(SUB_DIR)/%/src/%:
 	$(GIT_SUBUPDATE) $<
+
 
 
 activate:

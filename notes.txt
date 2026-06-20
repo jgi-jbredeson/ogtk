@@ -1,0 +1,18 @@
+
+import numpy
+from scipy.stats import poisson
+from scipy.stats import contingency
+from scipy.stats import false_discovery_control
+
+observed_freqs = numpy.zeros((nrows, ncols), dtype=float)
+expected_freqs = contingency.expected_freq(observed_freqs)
+pvalues = numpy.ones(nrows * ncols, dtype=float)
+
+for r in range(nrows):
+    for c in range(ncols):
+        # p-value for a particular cell
+    	pvalues[(r * ncols) + c] = poisson.sf(observed_freqs[r,c]-1, mu=expected_freqs[r,c])
+
+pvalues = false_discovery_control(pvalues, method='bh')
+
+
