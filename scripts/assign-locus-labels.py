@@ -14,8 +14,8 @@ import sys
 import getopt
 
 from math import inf as _POS_INF
-from og.core.compression import is_stream
-from og.core.parsers.orthogroups import OrthoFinderOrthogroups
+from og.core.compressio import is_stream
+from og.core.orthogroups.parsers import OrthoFinderOrthogroups
 from og.constants import (
     _COMMENT,
     _EMPTY,
@@ -30,6 +30,7 @@ _STRAND = {'-': -1, '.': 0, '+': +1}
 _STRAND_STR = '.+-'
 
 num = len
+
 
 
 def read_labels_file(labels_filename):
@@ -50,7 +51,8 @@ def read_labels_file(labels_filename):
 
     return labels
 
-    
+
+
 def usage(message=None, exitcode=1, stream=sys.stderr):
     message = _EMPTY if message is None else 'ERROR: %s\n\n' % message
     stream.write("\n")
@@ -58,18 +60,19 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Version: %s %s\n" % (__pkgname__, __version__))
     stream.write("Contact: %s\n" % __contact__)
     stream.write("\n")
-    stream.write("Usage: %s [options] <in.tsv> <labels.tsv> <species.id>\n" % __program__)
+    stream.write("Usage: %s [options] <in.tsv> <labels.tsv> <sample.id>\n" % __program__)
     stream.write("\n")
     stream.write("Options:\n")
-    stream.write("\n")
+    #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
+    #            0        10        20        30        40        50        60        70        80
     stream.write("  -o,--output-file <file>\n")
     stream.write("     Write output to file [stdout]\n")
     stream.write("\n")
     stream.write("  -h,--help\n")
     stream.write("     Print this help message and exit\n")
-    #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
-    #            0        10        20        30        40        50        60        70        80
     stream.write("\n")
+    #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
+    #            0        10        20        30        40        50        60        70        80    
     stream.write("Notes:\n")
     stream.write("  1. The in.tsv file is an Orthogroups.tsv file with header defined.\n")
     stream.write("\n")
@@ -101,25 +104,21 @@ def main(argv):
 
     ortho = OrthoFinderOrthogroups(arguments[0])
     labels = read_labels_file(arguments[1])
-    species_id = arguments[2]
+    sample_id = arguments[2]
     
-    
-    if species_id not in ortho.species:
-        raise KeyError("Species not found in Orthogroups file: '%s'" % (
-            str(species_id)
-        ))
+    ortho.check_sample(sample_id)
 
     locus_labels = dict()
-    species_index = ortho.species.index(species_id)
-    for group in range(num(ortho.groups)):
-
-        if ortho.groups[group].id in labels:
+    sample_index = ortho.sample.index(sample_id)
+    for group in ortho.groups:
+        if group.id in labels:
             label = labels[ortho.groups[group].id]
-            for locus_id in ortho.groups[group][species_index]:
+            for locus_id in group[sample_index]:
                 output_file.write("%s\t%s\n" % (locus_id, label))        
     
     if is_stream(output_file):
         output_file.close()
+
 
         
 if __name__ == '__main__':

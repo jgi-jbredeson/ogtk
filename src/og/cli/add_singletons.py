@@ -1,23 +1,27 @@
 
+from og import (
+    __authors__,
+    __contact__,
+    __pkgname__,
+    __version__,
+    __program__,
+)
+__purpose__ = 'Append missing members to an orthogroups file'
+
+
 import os
 import sys
 import getopt
 import og.api.add_singletons as api
 
 from og.constants import _EMPTY
-from og.core.compression import STDIO
+from og.cli.utils import get_exe
+from og.core.compressio import STDIO
 from og.core.config import SampleConfigFile
 from og.core.assembly_report import is_chr as _localized
 from og.core.assembly_report import is_placed as _placed
 from og.core.orthogroups.parsers import OrthogroupsFile
 
-
-__authors__ = 'Jessen V. Bredeson'
-__program__ = os.path.basename(__file__)
-__pkgname__ = '__PACKAGE_NAME__'
-__version__ = '__PACKAGE_VERSION__'
-__contact__ = '__PACKAGE_CONTACT__'
-__purpose__ = 'Append missing members to an orthogroups file'
 
 
 num = len
@@ -31,7 +35,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Version: %s %s\n" % (__pkgname__, __version__))
     stream.write("Contact: %s\n" % __contact__)
     stream.write("\n")
-    stream.write("Usage: %s [options] --yaml <in.yaml> <in.tsv>\n" % __program__)
+    stream.write("Usage: %s [options] --yaml <in.yaml> <in.tsv>\n" % get_exe(__program__, __file__))
     stream.write("\n")
     stream.write("Required:\n")
     #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|

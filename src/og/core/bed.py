@@ -8,7 +8,7 @@ from og.constants import (
     _EOL,
     _TAB
 )
-from og.core.compression import open, is_stream
+from og.core.compressio import open, is_stream
 from og.core.intervals import Interval, IntervalList
 from og.core.strand import Strand
 

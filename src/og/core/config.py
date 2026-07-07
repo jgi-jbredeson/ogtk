@@ -5,7 +5,7 @@ from math import inf as _POS_INF
 from og.core.bed import BEDNameMapFile
 from og.core.newick import IntervalNewickTree
 from og.core.assembly_report import AssemblyReportFile
-from og.core.compression import open, is_stream
+from og.core.compressio import open, is_stream
 from og.constants import _PYTHON_VERSION, dict
 
 

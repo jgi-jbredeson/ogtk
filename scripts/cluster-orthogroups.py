@@ -15,14 +15,11 @@ import getopt
 
 from math import inf as _POS_INF
 from og.core.members import _LENIENT, _STRICT
-from og.core.members import map_loci_to_sequence_counts
-from og.core.members import filter_unplaced_sequences
-from og.core.compression import is_stream
-from og.core.parsers.config import SampleConfigFile
-from og.core.parsers.orthogroups import OrthoFinderOrthogroups
-from og.core.parsers.assembly_report import is_chr as _localized
-from og.core.parsers.assembly_report import is_placed as _placed
-
+from og.core.compressio import is_stream
+from og.core.config import SampleConfigFile
+from og.core.assembly_report import is_chr as _localized
+from og.core.assembly_report import is_placed as _placed
+from og.core.orthogroups.parsers import OrthoFinderOrthogroups
 from og.constants import (
     _COMMA,
     _COMMENT,
@@ -104,6 +101,8 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Usage: %s [options] <in.tsv>\n" % __program__)
     stream.write("\n")
     stream.write("Options:\n")
+    #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
+    #            0        10        20        30        40        50        60        70        80
     # stream.write("  -b,--locus-bed-table <file>\n")
     # stream.write("     Table of sample ID and BED path\n")
     # stream.write("\n")
@@ -120,12 +119,12 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     # stream.write("     Maximum distance between orthogroups to cluster [1.0]\n")
     # stream.write("\n")
     # stream.write("  -e,--regex-unplaced <regex>\n")
-    # stream.write("     Identify unplaced sequence using the specified regex. Takes effect\n")
+    # stream.write("     Identify unplaced reference using the specified regex. Takes effect\n")
     # stream.write("     only when the `-b` option is also enabled [none]\n")
     # stream.write("\n")
     # stream.write("  -F,--output-cluster-map-file <file>\n")
     # stream.write("     Write each cluster ID and member orthogroup ID to file.\n")
-    stream.write("\n")    
+    # stream.write("\n")    
     stream.write("  -g,--min-orthogroups <uint>\n")
     stream.write("     Minimum number of orthogroups per cluster to output [1]\n")
     stream.write("\n")
@@ -133,37 +132,38 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Maximum number of orthogroups per cluster to output [inf]\n")
     stream.write("\n")
     stream.write("  -I,--ignore-unplaced-strictly\n")
-    stream.write("     Strictly ignore unplaced sequences in filtering. If a cell in the\n")
-    stream.write("     input orthogroups table contains no chromosomal sequences, that cell\n")
+    stream.write("     Strictly ignore unplaced references in filtering. If a cell in the\n")
+    stream.write("     input orthogroups table contains no chromosomal references, that cell\n")
     stream.write("     then contains no members.\n")  # Takes effect only when the `-b` option is\n")
     # stream.write("     also enabled.\n")
     stream.write("\n")
     stream.write("  -i,--ignore-unplaced-leniently\n")
-    stream.write("     Leniently ignore unplaced sequences in filtering. If a cell in the\n")
+    stream.write("     Leniently ignore unplaced references in filtering. If a cell in the\n")
     stream.write("     input orthogroups table contains only unplaced (ie, non-chomosomal)\n")
-    stream.write("     sequences, that cell contains members.\n")  # Takes effect only when the\n")
+    stream.write("     references, that cell contains members.\n")  # Takes effect only when the\n")
     # stream.write("     `-b` option is also enabled.\n")
     stream.write("\n")
     stream.write("  -m,--min-members <uint>\n")
     stream.write("     Minimum number of overlapping members between orthogroup sets [2]\n")
     stream.write("\n")
+    #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
+    #            0        10        20        30        40        50        60        70        80
     stream.write("  -M,--max-members <uint>\n")
     stream.write("     Maximum number of overlapping members between orthogroup sets [inf]\n")
     stream.write("\n")
-    stream.write("  -N,--output-sequence-names\n")
-    stream.write("     Map locus names to sequence names internally, then perform clustering.\n")
-    stream.write("     Write sequence names to output (use `-n` for locus names). Requires\n")
+    stream.write("  -N,--output-reference-names\n")
+    stream.write("     Map locus names to reference names internally, then perform clustering.\n")
+    stream.write("     Write reference names to output (use `-n` for locus names). Requires\n")
     stream.write("     `--yaml` be defined.\n")
     stream.write("\n")
-    stream.write("  -n,--map-to-sequence-names\n")
-    stream.write("     Map locus names to sequence names internally, then perform clustering.\n")
-    stream.write("     Write locus names to output (use `-N` for sequence names). Requires\n")
+    stream.write("  -n,--map-to-reference-names\n")
+    stream.write("     Map locus names to reference names internally, then perform clustering.\n")
+    stream.write("     Write locus names to output (use `-N` for reference names). Requires\n")
     stream.write("     `--yaml` be defined.\n")
     stream.write("\n")
-    stream.write("  -p,--input-sequence-names\n")
-    stream.write("     Locus names have already been mapped to their corresponding sequence\n")
-    stream.write("     names in the input orthogroups file. Perform filtering accordingly.\n")
-    stream.write("     Requires `--yaml` be defined.\n")
+    stream.write("  -r,--input-reference-names\n")
+    stream.write("     Input orthogroup members are reference names; do not convert, apply\n")
+    stream.write("     reference sequence filters appropriately. Requires `--yaml` be defined.\n")
     stream.write("\n")
     stream.write("  -s,--min-samples <uint>\n")
     stream.write("     Minimum number of samples permitted per orthogroup [2]\n")
@@ -172,8 +172,8 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("     Maximum number of samples permitted per orthogroup [inf]\n")
     stream.write("\n")
     stream.write("  -u,--ignore-unlocalized\n")
-    stream.write("     Map the names of loci on (placed but) unlocalized sequences to their\n")
-    stream.write("     designated sequence names, not to their placed chromosome names.\n")
+    stream.write("     Map the names of loci on (placed but) unlocalized references to their\n")
+    stream.write("     original reference names, not to their assigned molecule sequence names.\n")
     stream.write("\n")
     stream.write("  -y,--yaml <in.yaml>\n")
     stream.write("     Input YAML config file, with `tree` mapping key with nested submapping\n")
@@ -188,12 +188,12 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("\n")
     stream.write("Notes:\n")
     stream.write("  1. The in.tsv file is an Orthogroups.tsv file with header defined and\n")
-    stream.write("     assumes each orthogroup contains sequence names as members or that the\n")
-    stream.write("     `-b` option is also enabled to map input locus names to sequence names.\n")
+    stream.write("     assumes each orthogroup contains reference names as members or that the\n")
+    stream.write("     `-b` option is also enabled to map input locus names to reference names.\n")
     stream.write("\n")
     # stream.write("  2. The newick-str argument is a Newick-formatted tree string that can be\n")
     # stream.write("     written to filter orthogroups by conditioning on the number of members\n")
-    # stream.write("     (locus or sequence IDs) and sample at each leaf node and internal\n")
+    # stream.write("     (locus or reference IDs) and sample at each leaf node and internal\n")
     # stream.write("     node, respectively. In place of Newick branch lengths, however, the\n")
     # stream.write("     admissible number of members and sample are specified using unsigned\n")
     # stream.write("     integer number ranges, consisting (inclusively) of the minimum number,\n")
@@ -215,9 +215,9 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     # stream.write("  3. A locus BED table is a two-column file specifying the sample IDs\n")
     # stream.write("     (same as used in the Orthogroups.tsv header) and paths to locus BED\n")
     # stream.write("     files. The BED files must contain locus IDs in fourth column and the\n")
-    # stream.write("     sample IDs prepended to the sequence names (e.g., Hsa1 for chromosomes\n")
+    # stream.write("     sample IDs prepended to the reference names (e.g., Hsa1 for chromosomes\n")
     # stream.write("     and HsaSca123 or HsaUn123 for unplaced scaffolds). If a locus BED table\n")
-    # stream.write("     is given, then the number of sequences per sample is counted as the\n")
+    # stream.write("     is given, then the number of references per sample is counted as the\n")
     # stream.write("     members rather than locus IDs.\n")
     # stream.write("\n")
     stream.write("\n%s" % message)
@@ -225,7 +225,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
 
     
 def main(argv):
-    short_flags = 'hc:C:d:D:F:g:G:iIm:M:nNs:S:uy:'
+    short_flags = 'hc:C:d:D:F:g:G:iIm:M:nNrs:S:uy:'
     long_flags = (
         'help',
         'ignore-unplaced-leniently',
@@ -242,9 +242,9 @@ def main(argv):
         # 'output-cluster-counts-file-all=',
         # 'output-cluster-counts-file=',
         # 'output-cluster-map-file=',
-        'output-sequence-names',
-        'map-to-sequence-names',
-        'input-sequence-names',
+        'output-reference-names',
+        'map-to-reference-names',
+        'input-reference-names',
         'yaml='
     )
     try:
@@ -265,9 +265,9 @@ def main(argv):
     cluster_counts_mrg_file = False
     is_placed = _placed
     ignore_unplaced = False
-    map_seq_names = False
-    input_seq_names = False
-    output_seq_names = False
+    map_ref_names = False
+    input_ref_names = False
+    output_ref_names = False
     config_filename = None
     for flag, value in options:
         if   flag in ('-h','--help'):
@@ -288,13 +288,13 @@ def main(argv):
             min_members = int(float(value))
         elif flag in ('-M','--max-members'):
             max_members = int(float(value))
-        elif flag in ('-n','--map-to-sequence-names'):
-            map_seq_names = True
-        elif flag in ('-N','--output-sequence-names'):
-            output_seq_names = True
-            map_seq_names = True
-        elif flag in ('-p','--input-sequences-names'):
-            input_seq_names = True
+        elif flag in ('-n','--map-to-reference-names'):
+            map_ref_names = True
+        elif flag in ('-N','--output-reference-names'):
+            output_ref_names = True
+            map_ref_names = True
+        elif flag in ('-r','--input-references-names'):
+            input_ref_names = True
         elif flag in ('-s','--min-samples','--min-species'):
             min_samples = int(float(value))
         elif flag in ('-S','--max-samples','--max-species'):
@@ -305,12 +305,8 @@ def main(argv):
             config_filename = value
 
     config = None
-    if input_seq_names or map_seq_names:
-        if config_filename is None:
-            usage('`--yaml` config file required')
-    else:
-        output_seq_names = False
-        ignore_unplaced = False
+    if config_filename is None:
+        usage('`--yaml` config file required')
         
     if num(arguments) != 2:
         usage('Unexpected number of arguments')
@@ -329,62 +325,44 @@ def main(argv):
     if max_dist >= 1.0:
         max_dist = max_dist / num_samples + _EPSILON
 
-    if input_seq_names or map_seq_names:
+    if input_ref_names or map_ref_names:
         config = SampleConfigFile(
             config_filename,
             load_files=True,
             map_assigned_molecule=True
-        )            
-        for sample in input_ortho.samples:
-            if sample.id not in config.samples:
-                raise KeyError(
-                    "Sample not found in YAML file: '%s'" % str(sample.id)
-                )
+        )
+        config.check_samples([s.id for s in input_ortho.samples])
 
-        if input_seq_names:
+        if input_ref_names:
             chrom_ortho = input_ortho
         else:
-            chrom_ortho = OrthoFinderOrthogroups(samples=input_ortho.samples)
-            for locus_group in input_ortho.groups:
-                chrom_group = chrom_ortho.new_group(append=True)
-                chrom_group.id = locus_group.id
-                for sample in input_ortho.samples:
-                    chrom_group[sample.index] = \
-                        map_loci_to_sequence_counts(
-                            locus_group[sample.index],
-                            config.samples[sample.id],
-                            is_placed,
-                            ignore_unplaced
-                        )
-            if output_seq_names:                    
+            chrom_ortho = input_ortho.map_loci_to_references(
+                config.samples[sample.id],
+                is_placed=is_placed,
+                ignore_unplaced=ignore_unplaced,
+            )
+            if output_ref_names:                    
                 input_ortho = chrom_ortho
 
-        clust_ortho = OrthoFinderOrthogroups(samples=chrom_ortho.samples)
-        for chrom_group in chrom_ortho.groups:
-            clust_group = clust_ortho.new_group(append=True)
-            clust_group.id = chrom_group.id
-            for sample in chrom_ortho.samples:
-                clust_group[sample.index] = \
-                    filter_unplaced_sequences(
-                        chrom_group[sample.index],
-                        config.samples[sample.id],
-                        is_placed,
-                        ignore_unplaced,
-                        aggregate_unplaced=True
-                    )
-                chrom_group[sample.index] = \
-                    filter_unplaced_sequences(
-                        chrom_group[sample.index],
-                        config.samples[sample.id],
-                        is_placed,
-                        ignore_unplaced
-                    )
+        clust_ortho = chrom_group.filter_unplaced_references(
+            config.samples[sample.id],
+            is_placed=is_placed,
+            ignore_unplaced=ignore_unplaced,
+            aggregate_unplaced=True
+        )
+        chrom_ortho.filter_unplaced_references(
+            config.samples[sample.id],
+            is_placed=is_placed,
+            ignore_unplaced=ignore_unplaced,
+            inplace=True
+        )
     else:
+        # assumed to be input reference names, but perform no filtering
         chrom_ortho = input_ortho
         clust_ortho = input_ortho
 
     # TODO:
-    #  Instead of using strings in sets, index gene-containing sequences
+    #  Instead of using strings in sets, index gene-containing references
     #  into bit arrays and use std set operations. Must use numpy.array,
     #  as set operations are not supported by built-in list objects.
     #
@@ -633,11 +611,11 @@ def main(argv):
     if cluster_counts_all_file or cluster_counts_mrg_file:
         if cluster_counts_mrg_file:
             cluster_counts_mrg_file.write('Count\t%s\n' % (
-                input_ortho.format_orthogroups_header(id='Cluster')
+                input_ortho.format_header(id='Cluster')
             ))
         if cluster_counts_all_file:
             cluster_counts_all_file.write('Count\t%s\n' % (
-                input_ortho.format_orthogroups_header(id='Cluster')
+                input_ortho.format_header(id='Cluster')
             ))
         cluster_count = 0
         for i in clustered_pattern_representatives:              # a distinct_patterns_ranked index
@@ -661,7 +639,7 @@ def main(argv):
                     if min_orthogroups <= num_orthogroups <= max_orthogroups:
                         cluster_counts_mrg_file.write('%d\t%s\n' % (
                             num_orthogroups,
-                            input_ortho.format_orthogroups_record(
+                            input_ortho.format_record(
                                 id=cluster_id,
                                 group=pattern
                             )
@@ -674,7 +652,7 @@ def main(argv):
                     if min_orthogroups <= num_orthogroups <= max_orthogroups:
                         cluster_counts_all_file.write('%d\t%s\n' % (
                             num_orthogroups,
-                            input_ortho.format_orthogroups_record(
+                            input_ortho.format_record(
                                 id=pattern_id,
                                 group=pattern
                             )
@@ -708,7 +686,7 @@ def main(argv):
                         distinct_pattern_counts[distinct_pattern_index_map[
                             distinct_patterns_ranked[j]
                         ]],
-                        input_ortho.format_orthogroups_record(
+                        input_ortho.format_record(
                             id=cluster_id,
                             group=pattern
                         )
@@ -718,7 +696,7 @@ def main(argv):
                         distinct_pattern_counts[distinct_pattern_index_map[
                             distinct_patterns_ranked[j]
                         ]],
-                        input_ortho.format_orthogroups_record(
+                        input_ortho.format_record(
                             id=pattern_id,
                             group=pattern
                         )
@@ -734,7 +712,7 @@ def main(argv):
         
     if cluster_map_file:
         cluster_map_file.write('Cluster\t%s\n' % (
-            input_ortho.format_orthogroups_header()
+            input_ortho.format_header()
         ))
         cluster_count = 0
         for i in clustered_pattern_representatives:
@@ -752,7 +730,7 @@ def main(argv):
                     ]]:
                         cluster_map_file.write('%s\t%s\n' % (
                             pattern_id,
-                            input_ortho.format_orthogroups_record(index=g)
+                            input_ortho.format_record(index=g)
                         ))
             cluster_count += 1
 
@@ -774,7 +752,7 @@ def main(argv):
                 ]]:
                     cluster_map_file.write('%s\t%s\n' % (
                         pattern_id,
-                        input_ortho.format_orthogroups_record(index=g)
+                        input_ortho.format_record(index=g)
                     ))
             cluster_count += 1
             

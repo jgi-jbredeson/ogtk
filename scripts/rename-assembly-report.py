@@ -7,15 +7,15 @@ __program__ = os.path.basename(__file__)
 __pkgname__ = '__PACKAGE_NAME__'
 __version__ = '__PACKAGE_VERSION__'
 __contact__ = '__PACKAGE_CONTACT__'
-__purpose__ = 'Rename assembly_report sequences'
+__purpose__ = 'Rename assembly_report references'
 
 import re
 import sys
 import string
 import getopt
 
-from og.core.parsers.assembly_report import AssemblyReportFile
-from og.core.parsers.assembly_report import (
+from og.core.assembly_report import AssemblyReportFile
+from og.core.assembly_report import (
     _VALID_ATTRIBUTES,
     _VALID_COLUMNS,
     UNIT_PRIMARY,
@@ -114,27 +114,27 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("  -a,--alt-scaffold-regexp [column-name:]<pattern>\n")
     stream.write("     Use specified regular expression (which must contain at least one\n")
     stream.write("     capture group) to parse an unique identifier from the value given\n")
-    stream.write("     in column-name for alt-scaffold sequences.\n")
+    stream.write("     in column-name for alt-scaffold references.\n")
     stream.write("\n")
     stream.write("  -f,--fix-patch-regexp [column-name:]<pattern>\n")
     stream.write("     Use specified regular expression (which must contain at least one\n")
     stream.write("     capture group) to parse an unique identifier from the value given\n")
-    stream.write("     in column-name for fix-patch sequences.\n")
+    stream.write("     in column-name for fix-patch references.\n")
     stream.write("\n")
     stream.write("  -n,--novel-patch-regexp [column-name:]<pattern>\n")
     stream.write("     Use specified regular expression (which must contain at least one\n")
     stream.write("     capture group) to parse an unique identifier from the value given\n")
-    stream.write("     in column-name for novel-patch sequences.\n")
+    stream.write("     in column-name for novel-patch references.\n")
     stream.write("\n")
     stream.write("  -U,--unlocalized-scaffold-regexp [column-name:]<pattern>\n")
     stream.write("     Use specified regular expression (which must contain at least one\n")
     stream.write("     capture group) to parse an unique identifier from the value given\n")
-    stream.write("     in column-name for unlocalized-scaffold sequences.\n")
+    stream.write("     in column-name for unlocalized-scaffold references.\n")
     stream.write("\n")    
     stream.write("  -u,--unplaced-scaffold-regexp [column-name:]<pattern>\n")
     stream.write("     Use specified regular expression (which must contain at least one\n")
     stream.write("     capture group) to parse an unique identifier from the value given\n")
-    stream.write("     in column-name for unplaced-scaffold sequences.\n")
+    stream.write("     in column-name for unplaced-scaffold references.\n")
     stream.write("\n")    
     stream.write("  -Z,--chromosome-zero-pad-width <uint>\n")
     stream.write("     Generate zero-padded chromosome numbers with the specified width.\n")
@@ -152,7 +152,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     #            0         10         20       30        40        50        60        70        80
     stream.write("\n")
     stream.write("Notes:\n")
-    stream.write("  - By default, the sequence names for all sequence-roles, except\n")
+    stream.write("  - By default, the reference names for all reference-roles, except\n")
     stream.write("    assembled-molecule, are re-numbered.\n")
     stream.write("\n")
     stream.write("\n%s" % message)
@@ -218,7 +218,7 @@ def main(argv):
         if record.is_primary:
             if record.assigned_type == 'Chromosome':
                 if record.is_assembled_molecule:
-                    record.sequence_name \
+                    record.reference_name \
                         = assembly_prefix \
                         + format_number(
                             record.assigned_molecule,
@@ -226,7 +226,7 @@ def main(argv):
                         )
 
                 elif record.is_unlocalized:
-                    record.sequence_name = '%s%s.Un%s' % (
+                    record.reference_name = '%s%s.Un%s' % (
                         assembly_prefix,
                         format_number(
                             record.assigned_molecule,
@@ -242,26 +242,26 @@ def main(argv):
                 else:
                     raise NotImplementedError('%s:%s:%s' % (
                         record.assigned_type,
-                        record.sequence_role,
-                        record.sequence_name
+                        record.reference_role,
+                        record.reference_name
                     ))
             
             elif record.is_unplaced:
                 if unplaced_scaffold_regexp:
-                    record.sequence_name = get_subgroup(
+                    record.reference_name = get_subgroup(
                         unplaced_scaffold_regexp.pattern,
                         getattr(record, unplaced_scaffold_regexp.column)
                     )
-                    record.sequence_name = '%sUn%s' % (
+                    record.reference_name = '%sUn%s' % (
                         assembly_prefix,
                         format_number(
-                            record.sequence_name,
+                            record.reference_name,
                             sca_zero_pad_width
                         )
                     )
                 else:
                     unplaced_count += 1
-                    record.sequence_name = '%sUn%s' % (
+                    record.reference_name = '%sUn%s' % (
                         assembly_prefix,
                         format_number(
                             str(unplaced_count),
@@ -271,8 +271,8 @@ def main(argv):
             else:
                 raise NotImplementedError('%s:%s:%s' % (
                     record.assigned_type,
-                    record.sequence_role,
-                    record.sequence_name
+                    record.reference_role,
+                    record.reference_name
                 ))
 
 
@@ -281,23 +281,23 @@ def main(argv):
                 molecule = record.assigned_type
                 if molecule == 'chloroplast':
                     # Assigned-Molecule is 'Pltd', not specific enough.
-                    record.sequence_name = assembly_prefix + 'CP'
+                    record.reference_name = assembly_prefix + 'CP'
                 else:
                     # Plastid
                     # Mitochondrion
                     # Mitochondrial Plasmid
-                    record.sequence_name = assembly_prefix + record.assigned_molecule
+                    record.reference_name = assembly_prefix + record.assigned_molecule
             else:
                 raise NotImplementedError('%s:%s:%s' % (
                     record.assigned_type,
-                    record.sequence_role,
-                    record.sequence_name
+                    record.reference_role,
+                    record.reference_name
                 ))
             
         else:  # Assembly-Unit not 'Primary Assembly'
             if record.assigned_type == 'Chromosome':
                 if record.is_alternate:
-                    record.sequence_name = '%s%s.Alt%s' % (
+                    record.reference_name = '%s%s.Alt%s' % (
                         assembly_prefix,
                         format_number(
                             record.assigned_molecule,
@@ -312,11 +312,11 @@ def main(argv):
                     )
                 elif record.is_patch:
                     patch_type = \
-                        'NP' if record.sequence_role == 'novel-patch' else \
-                        'FP' if record.sequence_role == 'fix-patch' else \
+                        'NP' if record.reference_role == 'novel-patch' else \
+                        'FP' if record.reference_role == 'fix-patch' else \
                         'OP' # other-patch?
                         
-                    record.sequence_name = '%s%s.%s%s' % (
+                    record.reference_name = '%s%s.%s%s' % (
                         assembly_prefix,
                         format_number(
                             record.assigned_molecule,
@@ -333,14 +333,14 @@ def main(argv):
                 else:
                     raise NotImplementedError('%s:%s:%s' % (
                         record.assigned_type,
-                        record.sequence_role,
-                        record.sequence_name
+                        record.reference_role,
+                        record.reference_name
                     ))
             else:
                 raise NotImplementedError('%s:%s:%s' % (
                     record.assigned_type,
-                    record.sequence_role,
-                    record.sequence_name
+                    record.reference_role,
+                    record.reference_name
                 ))
 
     assembly_report.to_file()

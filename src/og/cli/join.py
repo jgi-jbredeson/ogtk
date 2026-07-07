@@ -1,21 +1,22 @@
 
-import os
-
-__authors__ = 'Jessen V. Bredeson'
-__program__ = os.path.basename(__file__)
-__pkgname__ = '__PACKAGE_NAME__'
-__version__ = '__PACKAGE_VERSION__'
-__contact__ = '__PACKAGE_CONTACT__'
+from og import (
+    __authors__,
+    __contact__,
+    __pkgname__,
+    __version__,
+    __program__,
+)
 __purpose__ = 'Join OrthoFinder Orthogroups.tsv files'
 
+import os
 import sys
 import getopt
 import og.api.join as api
 
 from og.api.join import ENUM_JOIN
-from og.cli.utils import maxbits
+from og.cli.utils import maxbits, get_exe
 from og.constants import _EMPTY, _EOL
-from og.core.compression import STDIO
+from og.core.compressio import STDIO
 from og.core.orthogroups.parsers import OrthogroupsFile
 
 
@@ -32,7 +33,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Version: %s %s\n" % (__pkgname__, __version__))
     stream.write("Contact: %s\n" % __contact__)
     stream.write("\n")
-    stream.write("Usage: %s [options] <left.tsv> <right.tsv>\n" % __program__)
+    stream.write("Usage: %s [options] <left.tsv> <right.tsv>\n" % get_exe(__program__, __file__))
     stream.write("\n")
     stream.write("Options:\n")
     #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|

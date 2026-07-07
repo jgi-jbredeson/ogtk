@@ -23,8 +23,8 @@ __contact__ = '__PACKAGE_CONTACT__'
 __purpose__ = 'Assign ancestral Chordate LG identity'
 
 
-from og.core.parsers.orthogroups import OrthoFinderOrthogroups
-from og.core.parsers.newick import IntervalNewickTree
+from og.core.orthogroups.parsers import OrthoFinderOrthogroups
+from og.core.newick import IntervalNewickTree
 from og.constants import (
     _RPAREN,
     _LPAREN,

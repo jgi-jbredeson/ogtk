@@ -1,7 +1,7 @@
 
 import sys
 
-from og.core.compression import open, is_stream
+from og.core.compressio import open, is_stream
 from og.core.members import map_loci_to_reference_counts as _map
 from og.core.members import filter_unplaced_references as _flt
 from og.constants import (
@@ -300,7 +300,7 @@ class Orthogroups(object):
     def subset_samples(self, samples, min_samples=-1, inplace=False):
         self.check_samples(samples)
 
-        indices = {s.id:s.index for s in self.samples}
+        indices = self.samples.get_indices()
         
         copy = self.__class__(samples=samples)
         for group_ in self.groups:

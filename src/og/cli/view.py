@@ -1,11 +1,20 @@
-#!/usr/bin/env python
+
+from og import (
+    __authors__,
+    __contact__,
+    __pkgname__,
+    __version__,
+    __program__,
+)
+__purpose__ = 'Manipulate OrthoFinder orthogroups files'
 
 import os
 import sys
 import og.api.view as api
 
 from getopt import getopt, GetoptError
-from og.core.compression import STDIO, open
+from og.cli.utils import get_exe
+from og.core.compressio import STDIO, open
 from og.core.members import _LENIENT, _STRICT
 from og.core.tsv import read_to_list
 from og.core.config import SampleConfigFile
@@ -22,13 +31,6 @@ from og.constants import (
     _EOL,
     _TAB
 )
-
-__authors__ = 'Jessen V. Bredeson'
-__program__ = os.path.basename(__file__)
-__pkgname__ = '__PACKAGE_NAME__'
-__version__ = '__PACKAGE_VERSION__'
-__contact__ = '__PACKAGE_CONTACT__'
-__purpose__ = 'Manipulate OrthoFinder orthogroups files'
 
 _LF = '\n'
 _CR = '\r'
@@ -79,9 +81,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("Version: %s %s\n" % (__pkgname__, __version__))
     stream.write("Contact: %s\n" % __contact__)
     stream.write("\n")
-    stream.write("Usage: %s [options] <in.tsv>\n" % (
-        os.path.basename(sys.argv[0])
-    ))
+    stream.write("Usage: %s [options] <in.tsv>\n" % get_exe(__program__, __file__))
     stream.write("\n")
     stream.write("Options:\n")
     #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
@@ -207,9 +207,9 @@ def main(argv):
             replace_delim = value        
         elif flag in ('-d','--prefix-delim'):
             prefix_delim = value
-        elif flag in ('-I','ignore-unplaced-strictly'):
+        elif flag in ('-I','--ignore-unplaced-strictly'):
             ignore_unplaced = _STRICT
-        elif flag in ('-i','ignore-unplaced-leniently'):
+        elif flag in ('-i','--ignore-unplaced-leniently'):
             ignore_unplaced = _LENIENT
         elif flag in ('-N','--output-reference-names'):
             call_order.append((ENUM_CALLKEY.OUTPUT_REFS, None))

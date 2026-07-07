@@ -1,5 +1,5 @@
 
-from og.core.compression import open, is_stream
+from og.core.compressio import open, is_stream
 from og.constants import (
     _COMPRESSION_FLAGS,
     _COMMENT,

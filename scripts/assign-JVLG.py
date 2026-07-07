@@ -2,7 +2,7 @@
 
 import os
 import sys
-from og.core.parsers.orthogroups import OrthoFinderOrthogroups
+from og.core.orthogroups.parsers import OrthoFinderOrthogroups
 
 # with edits from Dan to correct some errors, and to add 'Group 1or2' and 'Group 13or14' for two ambiguous cases.
 

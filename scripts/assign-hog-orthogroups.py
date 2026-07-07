@@ -5,9 +5,7 @@ import sys
 
 from math import inf
 from getopt import getopt, GetoptError
-#from fastx.utils.io import load_listfile
-from og.core.utils import index_list
-from og.core.parsers.orthogroups import OrthoFinderOrthogroups
+from og.core.orthogroups.parsers import OrthoFinderOrthogroups
 from og.constants import (
     _COMMA,
     _EMPTY,
@@ -45,6 +43,8 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     ))
     stream.write("\n")
     stream.write("Options:\n")
+    #------------|----+----|----+----|----+----|----+----|----+----|----+----|----+----|----+----|
+    #            0        10        20        30        40        50        60        70        80
     stream.write("  -l,--label-members\n")
     stream.write("     Append the reference orthogroup ID to each query member\n")
     stream.write("\n")

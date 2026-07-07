@@ -3,7 +3,7 @@ import sys
 
 from og.core.utils import index_list
 from og.core.members import _STRICT
-from og.core.compression import is_stream, open
+from og.core.compressio import is_stream, open
 from og.core.assembly_report import is_placed as _placed
 from og.core.orthogroups.parsers import ClusterErrorOrthogroups
 from og.core.orthogroups.parsers import _COMPRESSION_FLAGS

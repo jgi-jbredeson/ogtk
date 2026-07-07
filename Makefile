@@ -53,6 +53,7 @@ PYTHON_VERSION := $(shell $(PYTHON) --version 2>&1 | awk '{if (/Python/) {split(
 
 
 BIN_TARGETS = \
+	$(BIN_DIR)/ogtk \
 	$(BIN_DIR)/add-singleton-orthogroups \
 	$(BIN_DIR)/assign-BLG \
 	$(BIN_DIR)/assign-CLG \
@@ -111,12 +112,13 @@ LIB_TARGETS = \
 	$(LIB_DIR)/$(LIBRARY)/core/orthogroups/parsers.py \
 	$(LIB_DIR)/$(LIBRARY)/core/trees.py \
 	$(LIB_DIR)/$(LIBRARY)/core/tsv.py \
-	$(LIB_DIR)/$(LIBRARY)/core/utils.py
+	$(LIB_DIR)/$(LIBRARY)/core/utils.py \
+	$(LIB_DIR)/$(LIBRARY)/logging.py
 
 SUB_TARGETS = \
 	$(LIB_DIR)/bgzip.py \
 	$(LIB_DIR)/$(LIBRARY)/core/strand.py \
-	$(LIB_DIR)/$(LIBRARY)/core/compression \
+	$(LIB_DIR)/$(LIBRARY)/core/compressio \
 	$(LIB_DIR)/$(LIBRARY)/core/intervals \
 
 
@@ -157,8 +159,8 @@ $(LIB_DIR)/%: $(SRC_DIR)/%
 $(LIB_DIR)/$(LIBRARY)/core/%: $(SUB_DIR)/%/src/% $(LIB_DIR)/$(LIBRARY) 
 	make -C $(SUB_DIR)/$(subst .py,,$*) install INSTALL_PATH=$(@D)
 
-$(LIB_DIR)/bgzip.py: $(SUB_DIR)/compression/src/bgzip.py
-	make -C $(SUB_DIR)/compression install-bgzip INSTALL_PATH=$(@D)
+$(LIB_DIR)/bgzip.py: $(SUB_DIR)/compressio/src/bgzip.py
+	make -C $(SUB_DIR)/compressio install-bgzip INSTALL_PATH=$(@D)
 
 $(SUB_DIR)/%/src/%:
 	$(GIT_SUBUPDATE) $<

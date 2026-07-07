@@ -4,7 +4,7 @@ import os
 import re
 import sys
 
-from og.core.parsers.orthogroups import OrthoFinderOrthogroups
+from og.core.orthogroups.parsers import OrthoFinderOrthogroups
 from og.constants import (
     _EOL,
     _TAB
