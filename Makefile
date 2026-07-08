@@ -183,4 +183,7 @@ install: all
 
 
 clean:
+	-make clean -C $(SUB_DIR)/compressio
+	-make clean -C $(SUB_DIR)/intervals
+	-make clean -C $(SUB_DIR)/strand
 	-$(RM_R) $(BUILD_DIR)
