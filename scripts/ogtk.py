@@ -73,7 +73,7 @@ def usage(message=None, exitcode=1, stream=sys.stderr):
     stream.write("  filter         Filter orthogroups files in various ways\n")
     stream.write("  join           Join orthogroups files on member overlap\n")
     stream.write("  score          Use manual clustering to classify orthogroups\n")
-    stream.write("  subset         Subset orthogroups file members\n")
+    stream.write("  subset         Subset orthogroups file members or group IDs\n")
     stream.write("  update         Reassign groups using posterior probabilities\n")
     stream.write("  upset          Print upset plot describing an orthogroups file\n")
     stream.write("  view           Manipulate/convert orthogroups files\n")

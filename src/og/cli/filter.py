@@ -238,7 +238,7 @@ def main(argv):
         input_reference_names=input_reference_names,
         map_to_reference_names=map_to_reference_names,
         output_reference_names=output_reference_names,
-        output_file=STDIO
+        output_file=output_file
     )
 
     return 0
